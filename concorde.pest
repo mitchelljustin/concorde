@@ -1,0 +1,47 @@
+//
+// Created by intellij-pest on 2023-08-27
+// concorde
+// Author: mitch
+//
+
+program = {
+    class_def
+}
+
+class_def = {
+    "class"
+}
+
+literal = {
+    number | string | bool | nil
+}
+
+bool = @{ "true" | "false" }
+nil = @{ "nil" }
+
+KEYWORD = @{
+    "class"
+}
+
+ident = @{
+    !(KEYWORD ~ !XID_START) ~
+    XID_START ~ XID_CONTINUE*
+}
+
+number = @{
+    "-"? ~
+    integer ~
+    ("." ~ mantissa)?
+}
+integer = _{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT }
+mantissa = _{ ASCII_DIGIT+ }
+
+string = @{
+    "\"" ~ string_inner ~ "\""
+}
+
+string_inner = ${(!"\"" ~ ANY)*}
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
+
