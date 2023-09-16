@@ -1,13 +1,14 @@
-use crate::runtime::Error::NoSuchObject;
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
-use std::rc::Rc;
 
-use crate::types::{Object, ObjectRef, RcString, WeakObjectRef};
+use crate::runtime::Error::NoSuchObject;
+use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
+use crate::types::RcString;
 
 mod bootstrap;
+mod object;
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -45,9 +46,8 @@ impl Runtime {
 
     pub fn create_object(&mut self, class: &ObjectRef) -> ObjectRef {
         let object = Object::new_of_class(class);
-        let object_ref = Rc::new(RefCell::new(object));
-        self.all_objects.push(Rc::downgrade(&object_ref));
-        object_ref
+        self.all_objects.push(object.borrow().self_ref.clone());
+        object
     }
 
     pub fn resolve(&self, name: &str) -> Result {
@@ -59,7 +59,7 @@ impl Runtime {
         Err(NoSuchObject { name: name.into() })
     }
 
-    pub fn define(&mut self, name: RcString, object: ObjectRef) {
+    pub fn assign(&mut self, name: RcString, object: ObjectRef) {
         self.scope_stack
             .back_mut()
             .expect("no scope")

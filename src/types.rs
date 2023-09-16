@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 use std::io;
 use std::rc::{Rc, Weak};
 
@@ -136,53 +136,22 @@ define_collector_enums! {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Primitive {
     String(RcString),
     Number(f64),
     Boolean(bool),
 }
 
-pub type WeakObjectRef = Weak<RefCell<Object>>;
-pub type ObjectRef = Rc<RefCell<Object>>;
-
-pub struct Method {
-    pub name: RcString,
-    pub class: ObjectRef,
-    pub params: Vec<RcString>,
-    pub body: Node<Block>,
-}
-
-pub struct Object {
-    pub class: ObjectRef,
-    pub properties: HashMap<RcString, ObjectRef>,
-    pub methods: HashMap<RcString, Method>,
-    pub primitive: Option<Primitive>,
-}
-
-impl Object {
-    fn name(&self) -> Option<RcString> {
-        let class = self.class.borrow();
-        let Some(Primitive::String(name)) = &class.primitive else {
-            return None;
-        };
-        Some(name.clone())
+#[allow(non_upper_case_globals)]
+pub mod intrinsic {
+    pub mod class {
+        pub const Class: &str = "Class";
+        pub const String: &str = "String";
     }
-}
 
-impl Debug for Object {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#<>")
-    }
-}
-
-impl Object {
-    pub fn new_of_class(class: &ObjectRef) -> Object {
-        Self {
-            class: Rc::clone(class),
-            primitive: None,
-            properties: HashMap::new(),
-            methods: HashMap::new(),
-        }
+    pub mod property {
+        pub const name: &str = "name";
     }
 }
 
