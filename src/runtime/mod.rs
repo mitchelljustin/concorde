@@ -60,11 +60,12 @@ impl Runtime {
 
     pub fn create_class(&mut self, name: RcString) -> ObjectRef {
         let class = self.create_object(&self.class_class());
-        self.scope_stack
-            .front_mut()
-            .unwrap()
-            .insert(name, class.clone());
+        self.assign_global(name, class.clone());
         class
+    }
+
+    pub fn assign_global(&mut self, name: RcString, object: ObjectRef) {
+        self.scope_stack.front_mut().unwrap().insert(name, object);
     }
 
     pub fn resolve(&self, name: &str) -> Result {

@@ -8,6 +8,8 @@ use crate::types::{intrinsic, Block, Node, Primitive, RcString};
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
 
+pub enum MethodBody {}
+
 pub struct Method {
     pub name: RcString,
     pub class: ObjectRef,
