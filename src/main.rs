@@ -1,10 +1,12 @@
 #![feature(decl_macro)]
 
-mod parser;
-mod compiler;
+use crate::runtime::Runtime;
+
+mod parse;
 mod runtime;
 mod types;
 
 fn main() {
+    let runtime = Runtime::new();
     println!("Hello, world!");
 }

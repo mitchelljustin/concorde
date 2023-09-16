@@ -1,33 +1,49 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
+use std::rc::{Rc, Weak};
 
-use crate::{compiler, parser, runtime};
+use pest::iterators::Pair;
+
+use crate::parse::Rule;
+use crate::{parse, runtime};
 
 #[derive(thiserror::Error, Debug)]
 pub enum TopError {
-    #[error("compiler error: {0}")]
-    Compiler(#[from] compiler::Error),
     #[error("runtime error: {0}")]
     Runtime(#[from] runtime::Error),
+    #[error("parse error: {0}")]
+    Parse(#[from] parse::Error),
 
-    #[error("parser error: {0}")]
-    Parser(#[from] parser::Error),
     #[error("I/O error: {0}")]
     IO(#[from] io::Error),
 }
 
-pub struct SyntaxNode<Variant = AnyNode> {
-    pub(crate) source: String,
-    pub(crate) variant: Variant,
+pub type RcString = Rc<str>;
+
+#[derive(Debug, Clone)]
+pub struct Node<Variant: NodeVariant = AnyNodeVariant> {
+    pub(crate) source: RcString,
+    pub(crate) line_col: (usize, usize),
+    pub(crate) v: Variant,
+}
+
+pub trait NodeVariant: Sized + Debug + Clone {
+    fn into_node(self, pair: &Pair<Rule>) -> Node<Self> {
+        Node {
+            source: pair.as_str().into(),
+            line_col: pair.line_col(),
+            v: self,
+        }
+    }
 }
 
 define_node_types! {
-    [AnyNode]
+    [AnyNodeVariant]
 
-    Type {
-        name: String,
-    }
     Ident {
-        name: String,
+        name: RcString,
     }
     Number {
         value: f64,
@@ -35,61 +51,60 @@ define_node_types! {
     Boolean {
         value: bool,
     }
-    LiteralString {
-        value: String,
+    String {
+        value: RcString,
     }
 
     Program {
-        body: Block,
+        body: Node<Block>,
     }
     IfElse {
-        condition: Expression,
-        then_body: Block,
-        else_body: Option<Block>,
+        condition: Node<Expression>,
+        then_body: Node<Block>,
+        else_body: Option<Node<Block>>,
     }
     ForLoop {
-        iterator: Ident,
-        target: Expression,
-        body: Block,
+        iterator: Node<Ident>,
+        target: Node<Expression>,
+        body: Node<Block>,
     }
+    Break {}
+    Continue {}
     WhileLoop {
-        condition: Expression,
-        body: Block,
+        condition: Node<Expression>,
+        body: Node<Block>,
     }
     Access {
-        target: Box<Expression>,
-        member: Ident,
+        target: Box<Node<Expression>>,
+        member: Node<Ident>,
     }
     Assignment {
-        target: LValue,
-        value: Expression,
+        target: Node<LValue>,
+        value: Node<Expression>,
     }
     Call {
-        target: LValue,
-        arguments: Vec<Expression>,
+        target: Node<LValue>,
+        arguments: Vec<Node<Expression>>,
     }
     VarDefinition {
-        name: Ident,
-        ty: Type,
-        value: Expression,
+        name: Node<Ident>,
+        value: Node<Expression>,
+    }
+    VarReference {
+        name: Node<Ident>,
     }
     Block {
-        stmts: Vec<Statement>,
+        statements: Vec<Node<Statement>>,
     }
     ClassDefinition {
-        name: Ident,
-        fields: Vec<Parameter>,
-        methods: Vec<MethodDefinition>,
+        name: Node<Ident>,
+        fields: Vec<RcString>,
+        methods: Vec<Node<MethodDefinition>>,
     }
     MethodDefinition {
-        name: Ident,
-        parameters: Vec<Parameter>,
-        return_ty: Type,
-        body: Block,
-    }
-    Parameter {
-        name: Ident,
-        ty: Type,
+        name: Node<Ident>,
+        parameters: Vec<RcString>,
+        body: Node<Block>,
     }
 }
 
@@ -98,16 +113,20 @@ define_collector_enums! {
         IfElse,
         ForLoop,
         WhileLoop,
+        Break,
+        Continue,
         Block,
+        Expression,
     }
     Expression {
         Ident,
         Access,
         Call,
         Literal,
+        VarReference,
     }
     Literal {
-        LiteralString,
+        String,
         Number,
         Boolean,
     }
@@ -117,34 +136,54 @@ define_collector_enums! {
     }
 }
 
-pub struct Executable {
-    instructions: Vec<Instruction>,
+pub enum Primitive {
+    String(RcString),
+    Number(f64),
+    Boolean(bool),
 }
 
-#[derive(Debug)]
-pub enum Instruction {
-    New {
-        class: ClassId,
-    },
-    Call {
-        receiver: ObjectId,
-        method: MethodId,
-        arguments: Vec<ObjectId>,
-    },
-}
-
-create_id_types![ClassId, ObjectId, MethodId,];
+pub type WeakObjectRef = Weak<RefCell<Object>>;
+pub type ObjectRef = Rc<RefCell<Object>>;
 
 pub struct Method {
-    name: String,
-}
-
-pub struct Class {
-    methods: Vec<Method>,
+    pub name: RcString,
+    pub class: ObjectRef,
+    pub params: Vec<RcString>,
+    pub body: Node<Block>,
 }
 
 pub struct Object {
-    class: ClassId,
+    pub class: ObjectRef,
+    pub properties: HashMap<RcString, ObjectRef>,
+    pub methods: HashMap<RcString, Method>,
+    pub primitive: Option<Primitive>,
+}
+
+impl Object {
+    fn name(&self) -> Option<RcString> {
+        let class = self.class.borrow();
+        let Some(Primitive::String(name)) = &class.primitive else {
+            return None;
+        };
+        Some(name.clone())
+    }
+}
+
+impl Debug for Object {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#<>")
+    }
+}
+
+impl Object {
+    pub fn new_of_class(class: &ObjectRef) -> Object {
+        Self {
+            class: Rc::clone(class),
+            primitive: None,
+            properties: HashMap::new(),
+            methods: HashMap::new(),
+        }
+    }
 }
 
 macro define_node_types(
@@ -153,7 +192,7 @@ $(
     $name:ident {
         $(
             $field:ident : $ty:ty,
-        )+
+        )*
     }
 )+) {
     $(
@@ -161,8 +200,10 @@ $(
         pub struct $name {
             $(
                 pub $field : $ty,
-            )+
+            )*
         }
+
+        impl NodeVariant for $name {}
     )+
     define_collector_enums! {
         $any_node_name {
@@ -174,7 +215,7 @@ $(
 }
 
 macro define_collector_enums(
-$(
+    $(
         $collector_name:ident {
             $($variant:ident,)+
         }
@@ -184,15 +225,10 @@ $(
         #[derive(Debug, Clone)]
         pub enum $collector_name {
             $(
-                $variant($variant),
+                $variant(Node<$variant>),
             )+
         }
-    )+
-}
 
-macro create_id_types($($name:ident,)+) {
-$(
-        #[derive(Debug, Clone, Copy, PartialEq)]
-        pub struct $name(usize);
+        impl NodeVariant for $collector_name {}
     )+
 }
