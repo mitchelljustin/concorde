@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
 use std::rc::{Rc, Weak};
 
 use crate::types::{intrinsic, Block, Node, Primitive, RcString};
