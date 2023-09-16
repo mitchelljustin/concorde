@@ -24,10 +24,15 @@ pub struct Object {
     pub primitive: Option<Primitive>,
 }
 
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        self.self_ref.ptr_eq(&other.self_ref)
+    }
+}
+
 impl Object {
-    pub fn class_name(&self) -> Option<RcString> {
-        let class = self.class.borrow();
-        let name_obj = class.properties.get(intrinsic::property::name)?.borrow();
+    pub fn name(&self) -> Option<RcString> {
+        let name_obj = self.properties.get(intrinsic::property::name)?.borrow();
         let Some(Primitive::String(name)) = &name_obj.primitive else {
             return None;
         };
@@ -35,10 +40,13 @@ impl Object {
     }
 
     pub fn debug(&self) -> String {
-        let class_name = self.class_name().unwrap_or("???".into());
+        let class_name = self.class.borrow().name().unwrap_or("???".into());
         let ptr = self.self_ref.as_ptr();
-        dbg!(self, &ptr,);
         format!("#<{} {:p}>", class_name, ptr)
+    }
+
+    pub fn set_property(&mut self, name: RcString, value: ObjectRef) {
+        self.properties.insert(name, value);
     }
 }
 

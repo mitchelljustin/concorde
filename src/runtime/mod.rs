@@ -2,13 +2,12 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
 
-use crate::runtime::Error::NoSuchObject;
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
-use crate::types::RcString;
+use crate::runtime::Error::NoSuchObject;
+use crate::types::{intrinsic, RcString};
 
 mod bootstrap;
 mod object;
-
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -44,10 +43,28 @@ impl Runtime {
         runtime
     }
 
+    fn class_class(&self) -> ObjectRef {
+        self.scope_stack
+            .front()
+            .unwrap()
+            .get(intrinsic::class::Class)
+            .unwrap()
+            .clone()
+    }
+
     pub fn create_object(&mut self, class: &ObjectRef) -> ObjectRef {
         let object = Object::new_of_class(class);
         self.all_objects.push(object.borrow().self_ref.clone());
         object
+    }
+
+    pub fn create_class(&mut self, name: RcString) -> ObjectRef {
+        let class = self.create_object(&self.class_class());
+        self.scope_stack
+            .front_mut()
+            .unwrap()
+            .insert(name, class.clone());
+        class
     }
 
     pub fn resolve(&self, name: &str) -> Result {
