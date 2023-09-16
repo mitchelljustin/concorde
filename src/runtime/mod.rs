@@ -1,10 +1,11 @@
+use crate::runtime::bootstrap::intrinsic::class::StdClasses;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
 
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchObject;
-use crate::types::{intrinsic, RcString};
+use crate::types::{Primitive, RcString};
 
 mod bootstrap;
 mod object;
@@ -30,6 +31,7 @@ pub struct Builtins {
 
 pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
+    std_classes: Option<StdClasses>,
     scope_stack: VecDeque<HashMap<RcString, ObjectRef>>,
 }
 
@@ -38,28 +40,30 @@ impl Runtime {
         let mut runtime = Self {
             all_objects: Vec::new(),
             scope_stack: VecDeque::from([HashMap::new()]),
+            std_classes: None,
         };
-        runtime.init();
+        runtime.initialize();
         runtime
     }
 
-    fn class_class(&self) -> ObjectRef {
-        self.scope_stack
-            .front()
-            .unwrap()
-            .get(intrinsic::class::Class)
-            .unwrap()
-            .clone()
+    fn classes(&self) -> &StdClasses {
+        self.std_classes.as_ref().unwrap()
     }
 
-    pub fn create_object(&mut self, class: &ObjectRef) -> ObjectRef {
+    pub fn create_string(&mut self, value: RcString) -> ObjectRef {
+        let string_obj = self.create_object(self.classes().String.clone());
+        string_obj.borrow_mut().primitive = Some(Primitive::String(value));
+        string_obj
+    }
+
+    pub fn create_object(&mut self, class: ObjectRef) -> ObjectRef {
         let object = Object::new_of_class(class);
-        self.all_objects.push(object.borrow().self_ref.clone());
+        self.all_objects.push(object.borrow().weak_self.clone());
         object
     }
 
     pub fn create_class(&mut self, name: RcString) -> ObjectRef {
-        let class = self.create_object(&self.class_class());
+        let class = self.create_object(self.classes().Class.clone());
         self.assign_global(name, class.clone());
         class
     }

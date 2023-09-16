@@ -1,9 +1,10 @@
+use crate::runtime::bootstrap::intrinsic;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
-use crate::types::{intrinsic, Block, Node, Primitive, RcString};
+use crate::types::{Block, Node, Primitive, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
@@ -19,7 +20,7 @@ pub struct Method {
 
 pub struct Object {
     pub class: ObjectRef,
-    pub self_ref: WeakObjectRef,
+    pub weak_self: WeakObjectRef,
     pub properties: HashMap<RcString, ObjectRef>,
     pub methods: HashMap<RcString, Method>,
     pub primitive: Option<Primitive>,
@@ -27,7 +28,7 @@ pub struct Object {
 
 impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
-        self.self_ref.ptr_eq(&other.self_ref)
+        self.weak_self.ptr_eq(&other.weak_self)
     }
 }
 
@@ -42,7 +43,7 @@ impl Object {
 
     pub fn debug(&self) -> String {
         let class_name = self.class.borrow().name().unwrap_or("???".into());
-        let ptr = self.self_ref.as_ptr();
+        let ptr = self.weak_self.as_ptr();
         format!("#<{} {:p}>", class_name, ptr)
     }
 
@@ -54,7 +55,7 @@ impl Object {
 impl Debug for Object {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Object")
-            .field("ptr", &self.self_ref.as_ptr())
+            .field("ptr", &self.weak_self.as_ptr())
             .field("class_ptr", &self.class.as_ptr())
             .field("primitive", &self.primitive)
             .finish()
@@ -62,12 +63,12 @@ impl Debug for Object {
 }
 
 impl Object {
-    pub fn new_of_class(class: &ObjectRef) -> ObjectRef {
-        Rc::new_cyclic(|self_ref| {
+    pub fn new_of_class(class: ObjectRef) -> ObjectRef {
+        Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
-                class: Rc::clone(class),
+                class,
                 primitive: None,
-                self_ref: self_ref.clone(),
+                weak_self: weak_self.clone(),
                 properties: HashMap::new(),
                 methods: HashMap::new(),
             })

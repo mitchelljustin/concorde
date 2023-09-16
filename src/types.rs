@@ -141,18 +141,6 @@ pub enum Primitive {
     Boolean(bool),
 }
 
-#[allow(non_upper_case_globals)]
-pub mod intrinsic {
-    pub mod class {
-        pub const Class: &str = "Class";
-        pub const String: &str = "String";
-    }
-
-    pub mod property {
-        pub const name: &str = "name";
-    }
-}
-
 macro define_node_types(
     [$any_node_name:ident]
 $(
