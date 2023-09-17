@@ -4,10 +4,13 @@ use crate::types::RcString;
 
 #[allow(non_upper_case_globals)]
 pub mod builtin {
+    pub const SELF: &str = "self";
+
     pub mod class {
         pub const Class: &str = "Class";
         pub const String: &str = "String";
         pub const NilClass: &str = "NilClass";
+        pub const Main: &str = "Main";
     }
 
     pub mod property {
@@ -15,28 +18,42 @@ pub mod builtin {
     }
 }
 
-#[allow(non_snake_case)]
-pub struct Builtins {
-    pub Class: ObjectRef,
-    pub String: ObjectRef,
-    pub NilClass: ObjectRef,
-    pub nil: ObjectRef,
-}
+macro define_builtins(
+    $Builtins:ident {
+        $(
+            $name:ident,
+        )+
+    }
+) {
+    #[allow(non_snake_case)]
+    pub struct $Builtins {
+        $(
+            pub $name: ObjectRef,
+        )+
+    }
 
-impl Default for Builtins {
-    fn default() -> Self {
-        Self {
-            Class: Object::new_dummy(),
-            String: Object::new_dummy(),
-            NilClass: Object::new_dummy(),
-            nil: Object::new_dummy(),
+    impl Default for $Builtins {
+        fn default() -> Self {
+            Self {
+                $(
+                    $name: Object::new_dummy(),
+                )+
+            }
         }
     }
 }
 
+define_builtins!(Builtins {
+    Class,
+    String,
+    NilClass,
+    Main,
+    nil,
+});
+
 #[allow(non_snake_case)]
 impl Runtime {
-    pub(crate) fn initialize(&mut self) {
+    pub(crate) fn bootstrap(&mut self) {
         self.builtins.Class = Object::new_dummy();
         let Class = self.builtins.Class.clone();
         Class.borrow_mut().class = Some(Class.clone());
@@ -61,5 +78,9 @@ impl Runtime {
 
         self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
+
+        self.builtins.Main = self.create_class(builtin::class::Main.into());
+        let main = self.create_object(self.builtins.Main.clone());
+        self.scope_stack.front_mut().unwrap().receiver = Some(main);
     }
 }

@@ -9,12 +9,28 @@ program = {
 }
 
 stmts = {
-    (stmt ~ NEWLINE)+
+    (stmt ~ NEWLINE)*
 }
 
 stmt = {
     assignment |
+    method_def |
     expr
+}
+
+method_def = {
+    "def" ~ ident ~ param_list ~ NEWLINE ~
+        stmts ~
+    "end"
+}
+
+param_list = {
+    ("(" ~ ")") | 
+    ("(" ~ param ~ ("," ~ param)* ~ ","? ~ ")")
+}
+
+param = {
+    ident
 }
 
 assignment = {

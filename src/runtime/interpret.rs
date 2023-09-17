@@ -1,4 +1,5 @@
-use crate::runtime::object::ObjectRef;
+use crate::runtime::object::{Method, MethodBody, ObjectRef, Param};
+use crate::runtime::Error::DuplicateDefinition;
 use crate::runtime::Result;
 use crate::runtime::Runtime;
 use crate::types::{Call, Expression, LValue, Literal, Node, Primitive, Program, Statement};
@@ -15,6 +16,28 @@ impl Runtime {
         match statement.v {
             Statement::Expression(expression) => {
                 self.eval(expression)?;
+            }
+            Statement::MethodDefinition(method_def) => {
+                let receiver = self.receiver();
+                let method_name = method_def.name.name.clone();
+                if receiver.borrow_mut().methods.contains_key(&method_name) {
+                    return Err(DuplicateDefinition {
+                        name: method_name.clone(),
+                    });
+                }
+                let params = method_def
+                    .parameters
+                    .iter()
+                    .map(|param| Param::Positional(param.name.name.clone()))
+                    .collect();
+                let body = MethodBody::User(method_def.v.body);
+                let method = Method {
+                    name: method_name.clone(),
+                    class: receiver.borrow().class.clone().unwrap(),
+                    params,
+                    body,
+                };
+                receiver.borrow_mut().methods.insert(method_name, method);
             }
             Statement::Assignment(assignment) => {
                 let LValue::Variable(var) = assignment.v.target.v.clone() else {

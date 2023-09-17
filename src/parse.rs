@@ -3,8 +3,9 @@ use pest::Parser;
 use pest_derive::Parser;
 
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Block, Call, Expression, Ident, LValue, Literal, Nil, Node,
-    NodeVariant, Program, Statement, String as StringVariant, TopError, Variable,
+    Access, AnyNodeVariant, Assignment, Block, Call, Expression, Ident, LValue, Literal,
+    MethodDefinition, Nil, Node, NodeVariant, Parameter, Program, Statement,
+    String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -33,13 +34,20 @@ impl SourceParser {
     }
 
     fn parse_block(&mut self, pair: Pair<Rule>) -> Result<Node<Block>> {
-        let statements = self.parse_statements(pair.clone())?;
+        let statements = self.parse_list(
+            pair.clone().into_inner().next().unwrap(),
+            Self::parse_statement,
+        )?;
         Ok(Block { statements }.into_node(&pair))
     }
 
-    fn parse_statements(&mut self, pair: Pair<Rule>) -> Result<Vec<Node<Statement>>> {
+    fn parse_list<T: NodeVariant>(
+        &mut self,
+        pair: Pair<Rule>,
+        parse_one: fn(&mut Self, Pair<Rule>) -> Result<Node<T>>,
+    ) -> Result<Vec<Node<T>>> {
         pair.into_inner()
-            .map(|pair| self.parse_statement(pair.into_inner().next().unwrap()))
+            .map(|pair| parse_one(self, pair))
             .collect()
     }
 
@@ -54,6 +62,26 @@ impl SourceParser {
                     Statement::Assignment(Assignment { target, value }.into_node(&pair))
                         .into_node(&pair),
                 )
+            }
+            Rule::method_def => {
+                let [name, param_list, body] = pair.clone().into_inner().next_chunk().unwrap();
+                let name = self.parse_ident(&name)?;
+                let parameters = self.parse_list(param_list, |s, pair| {
+                    Ok(Parameter {
+                        name: s.parse_ident(&pair.clone().into_inner().next().unwrap())?,
+                    }
+                    .into_node(&pair))
+                })?;
+                let body = self.parse_block(body)?;
+                Ok(Statement::MethodDefinition(
+                    MethodDefinition {
+                        name,
+                        body,
+                        parameters,
+                    }
+                    .into_node(&pair),
+                )
+                .into_node(&pair))
             }
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
@@ -88,7 +116,7 @@ impl SourceParser {
                 let Some(expr_list) = inner.next() else {
                     return self.parse_expression(target);
                 };
-                let arguments = self.parse_expr_list(expr_list)?;
+                let arguments = self.parse_list(expr_list, Self::parse_expression)?;
                 let target = Box::new(self.parse_expression(target)?);
                 Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
             }
@@ -96,7 +124,9 @@ impl SourceParser {
                 let literal = self.parse_literal(pair.clone())?;
                 Ok(Expression::Literal(literal).into_node(&pair))
             }
-            Rule::variable => Ok(Expression::Variable(self.parse_variable(&pair)).into_node(&pair)),
+            Rule::variable => {
+                Ok(Expression::Variable(self.parse_variable(&pair)?).into_node(&pair))
+            }
             rule => unreachable!("{rule:?}"),
         }
     }
@@ -116,28 +146,25 @@ impl SourceParser {
         }
     }
 
-    fn parse_expr_list(&mut self, expr_list: Pair<Rule>) -> Result<Vec<Node<Expression>>, Error> {
-        expr_list
-            .into_inner()
-            .map(|arg| self.parse_expression(arg))
-            .collect::<Result<Vec<_>, _>>()
-    }
-
     fn parse_lvalue(&mut self, pair: Pair<Rule>) -> Result<Node<LValue>> {
         match pair.as_rule() {
             Rule::lvalue | Rule::variable => self.parse_lvalue(pair.into_inner().next().unwrap()),
-            Rule::ident => Ok(LValue::Variable(self.parse_variable(&pair)).into_node(&pair)),
+            Rule::ident => Ok(LValue::Variable(self.parse_variable(&pair)?).into_node(&pair)),
             rule => unreachable!("{rule:?}"),
         }
     }
 
-    fn parse_variable(&mut self, pair: &Pair<Rule>) -> Node<Variable> {
-        Variable {
-            ident: Ident {
-                name: pair.as_str().into(),
-            }
-            .into_node(&pair),
+    fn parse_variable(&mut self, pair: &Pair<Rule>) -> Result<Node<Variable>> {
+        Ok(Variable {
+            ident: self.parse_ident(pair)?,
         }
-        .into_node(&pair)
+        .into_node(&pair))
+    }
+
+    fn parse_ident(&mut self, pair: &Pair<Rule>) -> Result<Node<Ident>> {
+        Ok(Ident {
+            name: pair.as_str().into(),
+        }
+        .into_node(&pair))
     }
 }

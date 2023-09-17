@@ -107,9 +107,12 @@ define_node_types! {
         fields: Vec<RcString>,
         methods: Vec<Node<MethodDefinition>>,
     }
+    Parameter {
+        name: Node<Ident>,
+    }
     MethodDefinition {
         name: Node<Ident>,
-        parameters: Vec<RcString>,
+        parameters: Vec<Node<Parameter>>,
         body: Node<Block>,
     }
 }
@@ -124,6 +127,7 @@ define_collector_enums! {
         Block,
         Assignment,
         Expression,
+        MethodDefinition,
     }
     Expression {
         Access,

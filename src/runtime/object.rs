@@ -9,13 +9,21 @@ use crate::types::{Block, Node, Primitive, RcString};
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
 
-pub enum MethodBody {}
+pub enum MethodBody {
+    User(Node<Block>),
+    System(fn(ObjectRef, Vec<ObjectRef>) -> ObjectRef),
+}
+
+pub enum Param {
+    Positional(RcString),
+    Vararg(RcString),
+}
 
 pub struct Method {
     pub name: RcString,
     pub class: ObjectRef,
-    pub params: Vec<RcString>,
-    pub body: Node<Block>,
+    pub params: Vec<Param>,
+    pub body: MethodBody,
 }
 
 pub struct Object {

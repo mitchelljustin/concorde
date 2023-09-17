@@ -2,6 +2,7 @@
 #![feature(new_uninit)]
 #![feature(strict_provenance)]
 #![feature(iter_next_chunk)]
+#![feature(let_chains)]
 
 use crate::parse::SourceParser;
 use crate::runtime::Runtime;
