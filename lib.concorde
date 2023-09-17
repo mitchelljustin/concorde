@@ -1,2 +1,4 @@
-def yolo()
+def yolo(x)
+    print(x)
 end
+print("hi")

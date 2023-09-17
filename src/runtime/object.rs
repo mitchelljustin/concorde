@@ -4,6 +4,8 @@ use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
 use crate::runtime::bootstrap::builtin;
+use crate::runtime::Error::DuplicateDefinition;
+use crate::runtime::{Result, Runtime};
 use crate::types::{Block, Node, Primitive, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
@@ -11,7 +13,7 @@ pub type ObjectRef = Rc<RefCell<Object>>;
 
 pub enum MethodBody {
     User(Node<Block>),
-    System(fn(ObjectRef, Vec<ObjectRef>) -> ObjectRef),
+    System(fn(&Runtime, ObjectRef, Vec<ObjectRef>) -> ObjectRef),
 }
 
 pub enum Param {
@@ -21,7 +23,7 @@ pub enum Param {
 
 pub struct Method {
     pub name: RcString,
-    pub class: ObjectRef,
+    pub class: WeakObjectRef,
     pub params: Vec<Param>,
     pub body: MethodBody,
 }
@@ -63,6 +65,32 @@ impl Object {
 
     pub fn set_property(&mut self, name: RcString, value: ObjectRef) {
         self.properties.insert(name, value);
+    }
+
+    pub fn class(&self) -> ObjectRef {
+        self.class.clone().unwrap()
+    }
+
+    pub fn define_method(
+        &mut self,
+        method_name: RcString,
+        params: Vec<Param>,
+        body: MethodBody,
+    ) -> Result<()> {
+        if self.methods.contains_key(&method_name) {
+            return Err(DuplicateDefinition {
+                class: self.weak_self.upgrade().expect("help i dont exist"),
+                name: method_name.clone(),
+            });
+        }
+        let method = Method {
+            name: method_name.clone(),
+            class: self.weak_self.clone(),
+            params,
+            body,
+        };
+        self.methods.insert(method_name, method);
+        Ok(())
     }
 }
 

@@ -9,6 +9,10 @@ program = {
 }
 
 stmts = {
+    (stmt ~ NEWLINE)+
+}
+
+optional_stmts = {
     (stmt ~ NEWLINE)*
 }
 
@@ -20,12 +24,12 @@ stmt = {
 
 method_def = {
     "def" ~ ident ~ param_list ~ NEWLINE ~
-        stmts ~
+        optional_stmts ~
     "end"
 }
 
 param_list = {
-    ("(" ~ ")") | 
+    ("(" ~ ")") |
     ("(" ~ param ~ ("," ~ param)* ~ ","? ~ ")")
 }
 
@@ -82,7 +86,7 @@ bool = @{ "true" | "false" }
 nil = @{ "nil" }
 
 KEYWORD = @{
-    "class" | "true" | "false" | "nil"
+    "class" | "true" | "false" | "nil" | "def" | "end"
 }
 
 ident = @{

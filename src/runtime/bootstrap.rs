@@ -1,4 +1,4 @@
-use crate::runtime::object::{Object, ObjectRef};
+use crate::runtime::object::{Method, MethodBody, Object, ObjectRef};
 use crate::runtime::Runtime;
 use crate::types::RcString;
 
@@ -76,11 +76,28 @@ impl Runtime {
             .borrow_mut()
             .set_property(builtin::property::name.into(), name_String_obj);
 
+        // create nil
         self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
 
+        // create main
         self.builtins.Main = self.create_class(builtin::class::Main.into());
         let main = self.create_object(self.builtins.Main.clone());
-        self.scope_stack.front_mut().unwrap().receiver = Some(main);
+        let global_scope = self.stack.front_mut().unwrap();
+        global_scope.receiver = Some(main);
+        global_scope.class = Some(self.builtins.Main.clone());
+
+        self.builtins
+            .Main
+            .borrow_mut()
+            .define_method(
+                "print".into(),
+                vec![],
+                MethodBody::System(|runtime, _this, args| {
+                    println!("{args:?}");
+                    runtime.nil()
+                }),
+            )
+            .unwrap();
     }
 }

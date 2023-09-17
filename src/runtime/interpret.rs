@@ -1,8 +1,8 @@
-use crate::runtime::object::{Method, MethodBody, ObjectRef, Param};
-use crate::runtime::Error::DuplicateDefinition;
+use crate::runtime::object::{MethodBody, ObjectRef, Param};
+use crate::runtime::Error::NoSuchMethod;
 use crate::runtime::Result;
 use crate::runtime::Runtime;
-use crate::types::{Call, Expression, LValue, Literal, Node, Primitive, Program, Statement};
+use crate::types::{Call, Expression, LValue, Literal, Node, Program, Statement};
 
 impl Runtime {
     pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
@@ -18,26 +18,17 @@ impl Runtime {
                 self.eval(expression)?;
             }
             Statement::MethodDefinition(method_def) => {
-                let receiver = self.receiver();
+                let class = self.class();
                 let method_name = method_def.name.name.clone();
-                if receiver.borrow_mut().methods.contains_key(&method_name) {
-                    return Err(DuplicateDefinition {
-                        name: method_name.clone(),
-                    });
-                }
                 let params = method_def
                     .parameters
                     .iter()
                     .map(|param| Param::Positional(param.name.name.clone()))
                     .collect();
                 let body = MethodBody::User(method_def.v.body);
-                let method = Method {
-                    name: method_name.clone(),
-                    class: receiver.borrow().class.clone().unwrap(),
-                    params,
-                    body,
-                };
-                receiver.borrow_mut().methods.insert(method_name, method);
+                class
+                    .borrow_mut()
+                    .define_method(method_name, params, body)?;
             }
             Statement::Assignment(assignment) => {
                 let LValue::Variable(var) = assignment.v.target.v.clone() else {
@@ -55,41 +46,27 @@ impl Runtime {
         match expression.v {
             Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
             Expression::Call(call) => {
-                let Call { arguments, target } = call.v;
-                let Expression::Variable(fn_name) = target.v else {
+                let Call { target, arguments } = call.v;
+                let Expression::Variable(method_name) = target.v else {
                     unimplemented!();
                 };
-                match fn_name.ident.name.as_ref() {
-                    "debug" => {
-                        for argument in arguments {
-                            let argument = self.eval(argument)?;
-                            println!("{}", argument.borrow().debug());
-                        }
-                        Ok(self.nil())
-                    }
-                    "print" => {
-                        let to_print = arguments
-                            .into_iter()
-                            .map(|argument| self.eval(argument))
-                            .collect::<Result<Vec<_>, _>>()?
-                            .into_iter()
-                            .filter_map(|argument| {
-                                if let Some(Primitive::String(string)) =
-                                    argument.borrow().primitive.clone()
-                                {
-                                    Some(string.to_string())
-                                } else if argument == self.builtins.nil {
-                                    Some("nil".to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        println!("{}", to_print);
-                        Ok(self.nil())
-                    }
-                    _ => unimplemented!(),
+                let name = &method_name.ident.name;
+                let receiver = self.receiver();
+                let class = receiver.borrow().class();
+                let class_borrowed = class.borrow();
+                let Some(method) = class_borrowed.methods.get(name) else {
+                    return Err(NoSuchMethod {
+                        class: class.clone(),
+                        name: name.clone(),
+                    });
+                };
+                let arguments = arguments
+                    .into_iter()
+                    .map(|argument| self.eval(argument))
+                    .collect::<Result<_, _>>()?;
+                match &method.body {
+                    MethodBody::User(_) => unimplemented!(),
+                    MethodBody::System(function) => Ok(function(self, receiver.clone(), arguments)),
                 }
             }
             Expression::Literal(literal) => self.eval_literal(literal),

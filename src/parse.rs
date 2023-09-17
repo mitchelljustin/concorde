@@ -34,10 +34,7 @@ impl SourceParser {
     }
 
     fn parse_block(&mut self, pair: Pair<Rule>) -> Result<Node<Block>> {
-        let statements = self.parse_list(
-            pair.clone().into_inner().next().unwrap(),
-            Self::parse_statement,
-        )?;
+        let statements = self.parse_list(pair.clone(), Self::parse_statement)?;
         Ok(Block { statements }.into_node(&pair))
     }
 
