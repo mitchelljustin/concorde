@@ -42,11 +42,10 @@ impl SourceParser {
     pub fn parse_statement(&mut self, pair: Pair<Rule>) -> Result<Node<Statement>> {
         match pair.as_rule() {
             Rule::stmt => self.parse_statement(pair.into_inner().next().unwrap()),
-            Rule::expr => {
-                let expression =
-                    self.parse_expression(pair.clone().into_inner().next().unwrap())?;
-                Ok(Statement::Expression(expression).into_node(&pair))
-            }
+            Rule::expr => Ok(Statement::Expression(
+                self.parse_expression(pair.clone().into_inner().next().unwrap())?,
+            )
+            .into_node(&pair)),
             rule => unreachable!("{rule:?}"),
         }
     }
@@ -55,29 +54,45 @@ impl SourceParser {
         match pair.as_rule() {
             Rule::expr => self.parse_expression(pair.into_inner().next().unwrap()),
             Rule::call => {
-                let [target, arg] = pair.clone().into_inner().next_chunk().unwrap();
-                Ok(Expression::Call(
-                    Call {
-                        target: LValue::Ident(
-                            Ident {
-                                name: target.as_str().into(),
-                            }
-                            .into_node(&target),
-                        )
-                        .into_node(&target),
-                        arguments: vec![self.parse_expression(arg)?],
-                    }
-                    .into_node(&pair),
-                )
-                .into_node(&pair))
+                let [target, args] = pair.clone().into_inner().next_chunk().unwrap();
+                let arguments = self.parse_expr_list(args)?;
+                let target = self.parse_lvalue(target)?;
+                Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
             }
+            Rule::literal => Ok(self.parse_literal(pair.into_inner().next().unwrap())?),
+            rule => unreachable!("{rule:?}"),
+        }
+    }
+
+    fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        match pair.as_rule() {
             Rule::string => Ok(Expression::Literal(
                 Literal::String(
                     StringVariant {
-                        value: pair.as_str().into(),
+                        value: pair.clone().into_inner().next().unwrap().as_str().into(),
                     }
                     .into_node(&pair),
                 )
+                .into_node(&pair),
+            )
+            .into_node(&pair)),
+            rule => unreachable!("{rule:?}"),
+        }
+    }
+
+    fn parse_expr_list(&mut self, expr_list: Pair<Rule>) -> Result<Vec<Node<Expression>>, Error> {
+        expr_list
+            .into_inner()
+            .map(|arg| self.parse_expression(arg))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub fn parse_lvalue(&mut self, pair: Pair<Rule>) -> Result<Node<LValue>> {
+        match pair.as_rule() {
+            Rule::ident => Ok(LValue::Ident(
+                Ident {
+                    name: pair.as_str().into(),
+                }
                 .into_node(&pair),
             )
             .into_node(&pair)),

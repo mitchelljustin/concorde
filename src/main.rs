@@ -16,6 +16,6 @@ fn main() -> Result<(), TopError> {
     let mut runtime = Runtime::new();
     let lib_source = fs::read_to_string("./lib.concorde")?;
     let program = SourceParser::default().parse(&lib_source)?;
-    runtime.exec(program.v.body.v.statements[0].clone())?;
+    runtime.exec_program(program)?;
     Ok(())
 }

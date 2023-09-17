@@ -13,11 +13,16 @@ stmt = {
 }
 
 expr = {
-    call | string
+    call | literal
 }
 
 call = {
-    ident ~ "(" ~ expr ~ ")"
+    ident ~ expr_list
+}
+
+expr_list = {
+    ("(" ~ ")") |
+    ("(" ~ expr ~ ("," ~ expr)* ~ ","? ~")")
 }
 
 literal = {

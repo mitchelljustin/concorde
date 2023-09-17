@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::io;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use pest::iterators::Pair;
@@ -34,6 +35,14 @@ pub trait NodeVariant: Sized + Debug + Clone {
             line_col: pair.line_col(),
             v: self,
         }
+    }
+}
+
+impl<V: NodeVariant> Deref for Node<V> {
+    type Target = V;
+
+    fn deref(&self) -> &Self::Target {
+        &self.v
     }
 }
 

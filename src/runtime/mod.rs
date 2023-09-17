@@ -5,7 +5,9 @@ use std::ops::ControlFlow;
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchObject;
-use crate::types::{Expression, LValue, Literal, Node, Primitive, RcString, Statement};
+use crate::types::{
+    Call, Expression, LValue, Literal, Node, Primitive, Program, RcString, Statement,
+};
 
 mod bootstrap;
 mod object;
@@ -41,6 +43,13 @@ impl Runtime {
         runtime
     }
 
+    pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
+        for statement in program.v.body.v.statements {
+            self.exec(statement)?;
+        }
+        Ok(())
+    }
+
     pub fn exec(&mut self, statement: Node<Statement>) -> Result<()> {
         match statement.v {
             Statement::Expression(expression) => self.eval(expression)?,
@@ -52,25 +61,46 @@ impl Runtime {
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
             Expression::Call(call) => {
-                let LValue::Ident(fn_name) = call.v.target.v else {
+                let Call { arguments, target } = call.v;
+                let LValue::Ident(fn_name) = target.v else {
                     unimplemented!();
                 };
-                let arg = call.v.arguments[0].clone();
-                let arg = self.eval(arg)?;
-                match fn_name.v.name.as_ref() {
+                match fn_name.name.as_ref() {
                     "debug" => {
-                        let debug = arg.borrow().debug();
-                        println!("{}", debug);
-                        Ok(self.create_string(debug.into()))
+                        for argument in arguments {
+                            let argument = self.eval(argument)?;
+                            println!("{}", argument.borrow().debug());
+                        }
+                        Ok(self.nil())
+                    }
+                    "print" => {
+                        let to_print = arguments
+                            .into_iter()
+                            .map(|argument| self.eval(argument))
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_iter()
+                            .map(|argument| {
+                                if let Some(Primitive::String(string)) =
+                                    argument.borrow().primitive.clone()
+                                {
+                                    string.to_string()
+                                } else {
+                                    "".to_string()
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        println!("{}", to_print);
+                        Ok(self.nil())
                     }
                     _ => unimplemented!(),
                 }
             }
             Expression::Literal(literal) => {
-                let Literal::String(string) = literal.v else {
+                let Literal::String(string) = &*literal else {
                     unimplemented!();
                 };
-                Ok(self.create_string(string.v.value.clone()))
+                Ok(self.create_string(string.value.clone()))
             }
             _ => unimplemented!(),
         }
@@ -116,5 +146,9 @@ impl Runtime {
             .back_mut()
             .expect("no scope")
             .insert(name, object);
+    }
+
+    fn nil(&self) -> ObjectRef {
+        self.builtins.nil.clone()
     }
 }

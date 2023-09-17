@@ -1,2 +1,6 @@
-debug("swag")
 debug("yolo")
+print("yolo", "swag")
+
+
+
+

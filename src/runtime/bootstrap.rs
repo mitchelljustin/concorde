@@ -7,6 +7,7 @@ pub mod builtin {
     pub mod class {
         pub const Class: &str = "Class";
         pub const String: &str = "String";
+        pub const NilClass: &str = "NilClass";
     }
 
     pub mod property {
@@ -18,6 +19,8 @@ pub mod builtin {
 pub struct Builtins {
     pub Class: ObjectRef,
     pub String: ObjectRef,
+    pub NilClass: ObjectRef,
+    pub nil: ObjectRef,
 }
 
 impl Default for Builtins {
@@ -25,6 +28,8 @@ impl Default for Builtins {
         Self {
             Class: Object::new_dummy(),
             String: Object::new_dummy(),
+            NilClass: Object::new_dummy(),
+            nil: Object::new_dummy(),
         }
     }
 }
@@ -53,5 +58,8 @@ impl Runtime {
             .String
             .borrow_mut()
             .set_property(builtin::property::name.into(), name_String_obj);
+
+        self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
+        self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
     }
 }
