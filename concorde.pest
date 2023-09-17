@@ -5,6 +5,10 @@
 //
 
 program = {
+    stmts
+}
+
+stmts = {
     (stmt? ~ NEWLINE)*
 }
 

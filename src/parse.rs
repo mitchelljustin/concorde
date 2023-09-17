@@ -28,20 +28,25 @@ impl SourceParser {
             .map_err(Error::Pest)?
             .next()
             .unwrap();
-        let body = Block {
-            statements: pair
-                .clone()
-                .into_inner()
-                .map(|pair| self.parse_statement(pair))
-                .collect::<Result<_>>()?,
-        }
-        .into_node(&pair);
+        let body = self.parse_block(pair.clone().into_inner().next().unwrap())?;
         Ok(Program { body }.into_node(&pair))
+    }
+
+    fn parse_block(&mut self, pair: Pair<Rule>) -> Result<Node<Block>> {
+        Ok(Block {
+            statements: self.parse_statements(pair.clone())?,
+        }
+        .into_node(&pair))
+    }
+
+    fn parse_statements(&mut self, pair: Pair<Rule>) -> Result<Vec<Node<Statement>>> {
+        pair.into_inner()
+            .map(|pair| self.parse_statement(pair.into_inner().next().unwrap()))
+            .collect()
     }
 
     pub fn parse_statement(&mut self, pair: Pair<Rule>) -> Result<Node<Statement>> {
         match pair.as_rule() {
-            Rule::stmt => self.parse_statement(pair.into_inner().next().unwrap()),
             Rule::expr => Ok(Statement::Expression(
                 self.parse_expression(pair.clone().into_inner().next().unwrap())?,
             )
