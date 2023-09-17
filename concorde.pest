@@ -5,14 +5,20 @@
 //
 
 program = {
-    class_def
+    (stmt? ~ NEWLINE)*
 }
 
-class_def = {
-    "class"
+stmt = {
+    expr
 }
 
+expr = {
+    call | string
+}
 
+call = {
+    ident ~ "(" ~ expr ~ ")"
+}
 
 literal = {
     number | string | bool | nil

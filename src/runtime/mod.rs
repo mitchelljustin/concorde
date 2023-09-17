@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchObject;
-use crate::types::{Primitive, RcString};
+use crate::types::{Expression, LValue, Literal, Node, Primitive, RcString, Statement};
 
 mod bootstrap;
 mod object;
@@ -41,6 +41,41 @@ impl Runtime {
         runtime
     }
 
+    pub fn exec(&mut self, statement: Node<Statement>) -> Result<()> {
+        match statement.v {
+            Statement::Expression(expression) => self.eval(expression)?,
+            _ => unimplemented!(),
+        };
+        Ok(())
+    }
+
+    pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
+        match expression.v {
+            Expression::Call(call) => {
+                let LValue::Ident(fn_name) = call.v.target.v else {
+                    unimplemented!();
+                };
+                let arg = call.v.arguments[0].clone();
+                let arg = self.eval(arg)?;
+                match fn_name.v.name.as_ref() {
+                    "debug" => {
+                        let debug = arg.borrow().debug();
+                        println!("{}", debug);
+                        Ok(self.create_string(debug.into()))
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+            Expression::Literal(literal) => {
+                let Literal::String(string) = literal.v else {
+                    unimplemented!();
+                };
+                Ok(self.create_string(string.v.value.clone()))
+            }
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn create_string(&mut self, value: RcString) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
         string_obj.borrow_mut().primitive = Some(Primitive::String(value));
@@ -56,10 +91,9 @@ impl Runtime {
     pub fn create_class(&mut self, name: RcString) -> ObjectRef {
         let class = self.create_object(self.builtins.Class.clone());
         let name_obj = self.create_string(name.clone());
-        class.borrow_mut().set_property(
-            builtin::property::name.into(),
-            name_obj,
-        );
+        class
+            .borrow_mut()
+            .set_property(builtin::property::name.into(), name_obj);
         self.assign_global(name, class.clone());
         class
     }
