@@ -1,8 +1,8 @@
-use crate::runtime::bootstrap::intrinsic::class::StdClasses;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
 
+use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchObject;
 use crate::types::{Primitive, RcString};
@@ -24,14 +24,9 @@ impl Display for Error {
 
 type Result<T = ObjectRef, E = Error> = std::result::Result<T, E>;
 
-pub struct Builtins {
-    class_class: ObjectRef,
-    class_string: ObjectRef,
-}
-
 pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
-    std_classes: Option<StdClasses>,
+    builtins: Builtins,
     scope_stack: VecDeque<HashMap<RcString, ObjectRef>>,
 }
 
@@ -40,18 +35,14 @@ impl Runtime {
         let mut runtime = Self {
             all_objects: Vec::new(),
             scope_stack: VecDeque::from([HashMap::new()]),
-            std_classes: None,
+            builtins: Builtins::default(),
         };
         runtime.initialize();
         runtime
     }
 
-    fn classes(&self) -> &StdClasses {
-        self.std_classes.as_ref().unwrap()
-    }
-
     pub fn create_string(&mut self, value: RcString) -> ObjectRef {
-        let string_obj = self.create_object(self.classes().String.clone());
+        let string_obj = self.create_object(self.builtins.String.clone());
         string_obj.borrow_mut().primitive = Some(Primitive::String(value));
         string_obj
     }
@@ -63,7 +54,12 @@ impl Runtime {
     }
 
     pub fn create_class(&mut self, name: RcString) -> ObjectRef {
-        let class = self.create_object(self.classes().Class.clone());
+        let class = self.create_object(self.builtins.Class.clone());
+        let name_obj = self.create_string(name.clone());
+        class.borrow_mut().set_property(
+            builtin::property::name.into(),
+            name_obj,
+        );
         self.assign_global(name, class.clone());
         class
     }

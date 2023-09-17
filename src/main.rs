@@ -1,4 +1,6 @@
 #![feature(decl_macro)]
+#![feature(new_uninit)]
+#![feature(strict_provenance)]
 
 use crate::runtime::Runtime;
 use crate::types::TopError;
@@ -8,8 +10,8 @@ mod runtime;
 mod types;
 
 fn main() -> Result<(), TopError> {
-    let runtime = Runtime::new();
-    let result = runtime.resolve("String")?;
-    println!("{}", result.borrow().debug());
+    let mut runtime = Runtime::new();
+    println!("{}", runtime.resolve("String").unwrap().borrow().debug());
+    println!("{}", runtime.create_string("Swag".into()).borrow().debug());
     Ok(())
 }

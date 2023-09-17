@@ -1,7 +1,9 @@
-use crate::runtime::bootstrap::intrinsic;
+use crate::runtime::bootstrap::builtin;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::mem::MaybeUninit;
+use std::ptr;
 use std::rc::{Rc, Weak};
 
 use crate::types::{Block, Node, Primitive, RcString};
@@ -19,7 +21,7 @@ pub struct Method {
 }
 
 pub struct Object {
-    pub class: ObjectRef,
+    pub class: Option<ObjectRef>,
     pub weak_self: WeakObjectRef,
     pub properties: HashMap<RcString, ObjectRef>,
     pub methods: HashMap<RcString, Method>,
@@ -33,8 +35,8 @@ impl PartialEq for Object {
 }
 
 impl Object {
-    pub fn name(&self) -> Option<RcString> {
-        let name_obj = self.properties.get(intrinsic::property::name)?.borrow();
+    pub fn get_name(&self) -> Option<RcString> {
+        let name_obj = self.properties.get(builtin::property::name)?.borrow();
         let Some(Primitive::String(name)) = &name_obj.primitive else {
             return None;
         };
@@ -42,7 +44,13 @@ impl Object {
     }
 
     pub fn debug(&self) -> String {
-        let class_name = self.class.borrow().name().unwrap_or("???".into());
+        let class_name = self
+            .class
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .get_name()
+            .expect("class has no __name__");
         let ptr = self.weak_self.as_ptr();
         format!("#<{} {:p}>", class_name, ptr)
     }
@@ -56,17 +64,29 @@ impl Debug for Object {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Object")
             .field("ptr", &self.weak_self.as_ptr())
-            .field("class_ptr", &self.class.as_ptr())
+            .field("class_ptr", &self.class.as_ref().map(Rc::as_ptr))
             .field("primitive", &self.primitive)
             .finish()
     }
 }
 
 impl Object {
+    pub fn new_dummy() -> ObjectRef {
+        Rc::new_cyclic(|weak_self| {
+            RefCell::new(Self {
+                class: None,
+                primitive: None,
+                weak_self: weak_self.clone(),
+                properties: HashMap::new(),
+                methods: HashMap::new(),
+            })
+        })
+    }
+
     pub fn new_of_class(class: ObjectRef) -> ObjectRef {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
-                class,
+                class: Some(class),
                 primitive: None,
                 weak_self: weak_self.clone(),
                 properties: HashMap::new(),

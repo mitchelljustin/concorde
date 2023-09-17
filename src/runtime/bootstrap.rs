@@ -1,100 +1,59 @@
-use std::mem::MaybeUninit;
 use std::ptr;
 
 use crate::runtime::object::{Object, ObjectRef};
 use crate::runtime::Runtime;
-
-macro define_string_consts($($name:ident,)+) {
-$(
-        pub const $name: &str = stringify!($name);
-    )+
-}
+use crate::types::RcString;
 
 #[allow(non_upper_case_globals)]
-pub mod intrinsic {
+pub mod builtin {
     pub mod class {
-        use crate::runtime::bootstrap::define_string_consts;
-        use crate::runtime::object::ObjectRef;
-        use crate::runtime::Runtime;
-        use crate::types::RcString;
-
-        macro define_classes(
-            StdClasses = $StdClasses:ident,
-            Class = $Class:ident,
-            create_builtin_classes = $create_builtin_classes:ident,
-            builtin_classes = [$($builtin_class:ident,)+]
-        ) {
-            define_string_consts!($Class, $($builtin_class,)+);
-
-            pub struct $StdClasses {
-                pub $Class: ObjectRef,
-                $(
-                    pub $builtin_class: ObjectRef,
-                )+
-            }
-
-            pub fn $create_builtin_classes(runtime: &mut Runtime, class_class: ObjectRef) {
-                runtime.std_classes = Some($StdClasses {
-                    $(
-                        $builtin_class: runtime.create_object(class_class.clone()),
-                    )+
-                    $Class: class_class,
-                });
-                let property_name: RcString = $crate::runtime::bootstrap::intrinsic::property::name.into();
-                let class_name_obj = runtime.create_string($Class.into());
-                runtime.classes().$Class.borrow_mut().set_property(
-                    property_name.clone(),
-                    class_name_obj,
-                );
-                $(
-                    let class = runtime.classes().$builtin_class.clone();
-                    let class_name: RcString = $builtin_class.into();
-                    let class_name_obj = runtime.create_string(class_name.clone());
-                    runtime.assign_global(
-                        class_name,
-                        class,
-                    );
-                    runtime.classes().$builtin_class.borrow_mut().set_property(
-                        property_name.clone(),
-                        class_name_obj,
-                    );
-                )+
-            }
-        }
-
-        define_classes![
-            StdClasses = StdClasses,
-            Class = Class,
-            create_builtin_classes = create_builtin_classes,
-            builtin_classes = [String, Number, NilClass,]
-        ];
+        pub const Class: &str = "Class";
+        pub const String: &str = "String";
     }
 
     pub mod property {
-        use crate::runtime::bootstrap::define_string_consts;
+        pub const name: &str = "__name__";
+    }
+}
 
-        define_string_consts![name,];
+#[allow(non_snake_case)]
+pub struct Builtins {
+    pub Class: ObjectRef,
+    pub String: ObjectRef,
+}
+
+impl Default for Builtins {
+    fn default() -> Self {
+        Self {
+            Class: Object::new_dummy(),
+            String: Object::new_dummy(),
+        }
     }
 }
 
 #[allow(non_snake_case)]
 impl Runtime {
-    fn create_Class(&mut self) -> ObjectRef {
-        // this is super illegal but it's the only way to create a strong cyclical Rc reference
-        let garbage_object_ref: ObjectRef = unsafe { MaybeUninit::zeroed().assume_init() };
-        let Class = Object::new_of_class(garbage_object_ref);
-        unsafe {
-            let Class_copy = ptr::read(&Class as *const _);
-            ptr::write(&mut Class.borrow_mut().class as *mut _, Class_copy);
-        }
-        debug_assert_eq!(Class.borrow().class, Class);
-        self.all_objects.push(Class.borrow().weak_self.clone());
-        self.assign_global(intrinsic::class::Class.into(), Class.clone());
-        Class
-    }
-
     pub(crate) fn initialize(&mut self) {
-        let Class = self.create_Class();
-        intrinsic::class::create_builtin_classes(self, Class);
+        self.builtins.Class = Object::new_dummy();
+        let Class = self.builtins.Class.clone();
+        Class.borrow_mut().class = Some(Class.clone());
+        // now we can create classes
+        self.all_objects.push(Class.borrow().weak_self.clone());
+        let name_Class: RcString = builtin::class::Class.into();
+        self.assign_global(name_Class.clone(), Class.clone());
+
+        self.builtins.String = self.create_object(Class.clone());
+        let name_String: RcString = builtin::class::String.into();
+        self.assign_global(name_String.clone(), self.builtins.String.clone());
+        // now we can create strings
+        let name_Class_obj = self.create_string(name_Class);
+        let name_String_obj = self.create_string(name_String);
+        Class
+            .borrow_mut()
+            .set_property(builtin::property::name.into(), name_Class_obj);
+        self.builtins
+            .String
+            .borrow_mut()
+            .set_property(builtin::property::name.into(), name_String_obj);
     }
 }
