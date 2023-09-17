@@ -2,7 +2,7 @@ use crate::runtime::object::{MethodBody, ObjectRef, Param};
 use crate::runtime::Error::{ArityMismatch, NoSuchMethod};
 use crate::runtime::Runtime;
 use crate::runtime::{Result, StackFrame};
-use crate::types::{Call, Expression, LValue, Literal, Node, Program, Statement};
+use crate::types::{Block, Call, Expression, LValue, Literal, Node, Program, Statement};
 
 impl Runtime {
     pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
@@ -98,20 +98,26 @@ impl Runtime {
                     variables,
                     ..StackFrame::default()
                 });
-                let mut retval = self.nil();
-                for (i, statement) in body.statements.iter().enumerate() {
-                    match &statement.v {
-                        Statement::Expression(expression) if i == body.statements.len() - 1 => {
-                            retval = self.eval(expression.clone())?;
-                        }
-                        _ => self.exec(statement.clone())?,
-                    }
-                }
+                let result = self.eval_block(body.clone());
                 self.stack.pop_back();
-                Ok(retval)
+                result
             }
             MethodBody::System(function) => Ok(function(self, receiver.clone(), arguments)),
         }
+    }
+
+    fn eval_block(&mut self, block: Node<Block>) -> Result<ObjectRef> {
+        let mut retval = self.nil();
+        let statement_count = block.statements.len();
+        for (i, statement) in block.v.statements.into_iter().enumerate() {
+            match statement.v {
+                Statement::Expression(expression) if i == statement_count - 1 => {
+                    retval = self.eval(expression.clone())?;
+                }
+                _ => self.exec(statement.clone())?,
+            }
+        }
+        Ok(retval)
     }
 
     fn eval_literal(&mut self, literal: Node<Literal>) -> Result<ObjectRef> {

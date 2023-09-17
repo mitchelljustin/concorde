@@ -131,6 +131,11 @@ impl Runtime {
                                 unreachable!();
                             };
                             print!("{value}")
+                        } else if arg_class == &runtime.builtins.Bool {
+                            let Some(Primitive::Boolean(value)) = &arg_borrowed.primitive else {
+                                unreachable!();
+                            };
+                            print!("{value}")
                         } else if arg == runtime.builtins.nil {
                             print!("nil")
                         } else {
