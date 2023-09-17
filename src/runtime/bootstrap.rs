@@ -1,5 +1,3 @@
-use std::ptr;
-
 use crate::runtime::object::{Object, ObjectRef};
 use crate::runtime::Runtime;
 use crate::types::RcString;

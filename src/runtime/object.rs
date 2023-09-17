@@ -1,11 +1,9 @@
-use crate::runtime::bootstrap::builtin;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::mem::MaybeUninit;
-use std::ptr;
 use std::rc::{Rc, Weak};
 
+use crate::runtime::bootstrap::builtin;
 use crate::types::{Block, Node, Primitive, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
