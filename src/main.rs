@@ -12,10 +12,16 @@ mod parse;
 mod runtime;
 mod types;
 
-fn main() -> Result<(), TopError> {
+fn run() -> Result<(), TopError> {
     let mut runtime = Runtime::new();
     let lib_source = fs::read_to_string("./lib.concorde")?;
     let program = SourceParser::default().parse(&lib_source)?;
     runtime.exec_program(program)?;
     Ok(())
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("{error}");
+    }
 }

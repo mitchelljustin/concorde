@@ -1,6 +1,2 @@
-debug("yolo")
-print("yolo", "swag")
-
-
-
-
+s = "yolo"
+print(s)

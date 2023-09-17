@@ -83,22 +83,18 @@ define_node_types! {
     }
     Access {
         target: Box<Node<Expression>>,
-        member: Node<Ident>,
+        member: Box<Node<Expression>>,
     }
     Assignment {
         target: Node<LValue>,
         value: Node<Expression>,
     }
     Call {
-        target: Node<LValue>,
+        target: Box<Node<Expression>>,
         arguments: Vec<Node<Expression>>,
     }
-    VarDefinition {
-        name: Node<Ident>,
-        value: Node<Expression>,
-    }
-    VarReference {
-        name: Node<Ident>,
+    Variable {
+        ident: Node<Ident>,
     }
     Block {
         statements: Vec<Node<Statement>>,
@@ -123,14 +119,14 @@ define_collector_enums! {
         Break,
         Continue,
         Block,
+        Assignment,
         Expression,
     }
     Expression {
-        Ident,
         Access,
         Call,
         Literal,
-        VarReference,
+        Variable,
     }
     Literal {
         String,
@@ -138,7 +134,7 @@ define_collector_enums! {
         Boolean,
     }
     LValue {
-        Ident,
+        Variable,
         Access,
     }
 }

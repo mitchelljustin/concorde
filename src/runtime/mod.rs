@@ -52,7 +52,16 @@ impl Runtime {
 
     pub fn exec(&mut self, statement: Node<Statement>) -> Result<()> {
         match statement.v {
-            Statement::Expression(expression) => self.eval(expression)?,
+            Statement::Expression(expression) => {
+                self.eval(expression)?;
+            }
+            Statement::Assignment(assignment) => {
+                let LValue::Variable(var) = assignment.v.target.v.clone() else {
+                    unimplemented!();
+                };
+                let value = self.eval(assignment.v.value)?;
+                self.assign(var.ident.name.clone(), value);
+            }
             _ => unimplemented!(),
         };
         Ok(())
@@ -60,12 +69,13 @@ impl Runtime {
 
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
+            Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
             Expression::Call(call) => {
                 let Call { arguments, target } = call.v;
-                let LValue::Ident(fn_name) = target.v else {
+                let Expression::Variable(fn_name) = target.v else {
                     unimplemented!();
                 };
-                match fn_name.name.as_ref() {
+                match fn_name.ident.name.as_ref() {
                     "debug" => {
                         for argument in arguments {
                             let argument = self.eval(argument)?;
