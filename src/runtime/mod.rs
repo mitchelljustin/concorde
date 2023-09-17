@@ -5,11 +5,10 @@ use std::ops::ControlFlow;
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchObject;
-use crate::types::{
-    Call, Expression, LValue, Literal, Node, Primitive, Program, RcString, Statement,
-};
+use crate::types::{Primitive, RcString};
 
 mod bootstrap;
+mod interpret;
 mod object;
 
 #[derive(thiserror::Error, Debug)]
@@ -24,7 +23,7 @@ impl Display for Error {
     }
 }
 
-type Result<T = ObjectRef, E = Error> = std::result::Result<T, E>;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
@@ -42,80 +41,6 @@ impl Runtime {
         runtime.initialize();
         runtime
     }
-
-    pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
-        for statement in program.v.body.v.statements {
-            self.exec(statement)?;
-        }
-        Ok(())
-    }
-
-    pub fn exec(&mut self, statement: Node<Statement>) -> Result<()> {
-        match statement.v {
-            Statement::Expression(expression) => {
-                self.eval(expression)?;
-            }
-            Statement::Assignment(assignment) => {
-                let LValue::Variable(var) = assignment.v.target.v.clone() else {
-                    unimplemented!();
-                };
-                let value = self.eval(assignment.v.value)?;
-                self.assign(var.ident.name.clone(), value);
-            }
-            _ => unimplemented!(),
-        };
-        Ok(())
-    }
-
-    pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
-        match expression.v {
-            Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
-            Expression::Call(call) => {
-                let Call { arguments, target } = call.v;
-                let Expression::Variable(fn_name) = target.v else {
-                    unimplemented!();
-                };
-                match fn_name.ident.name.as_ref() {
-                    "debug" => {
-                        for argument in arguments {
-                            let argument = self.eval(argument)?;
-                            println!("{}", argument.borrow().debug());
-                        }
-                        Ok(self.nil())
-                    }
-                    "print" => {
-                        let to_print = arguments
-                            .into_iter()
-                            .map(|argument| self.eval(argument))
-                            .collect::<Result<Vec<_>, _>>()?
-                            .into_iter()
-                            .map(|argument| {
-                                if let Some(Primitive::String(string)) =
-                                    argument.borrow().primitive.clone()
-                                {
-                                    string.to_string()
-                                } else {
-                                    "".to_string()
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        println!("{}", to_print);
-                        Ok(self.nil())
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-            Expression::Literal(literal) => {
-                let Literal::String(string) = &*literal else {
-                    unimplemented!();
-                };
-                Ok(self.create_string(string.value.clone()))
-            }
-            _ => unimplemented!(),
-        }
-    }
-
     pub fn create_string(&mut self, value: RcString) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
         string_obj.borrow_mut().primitive = Some(Primitive::String(value));
@@ -142,7 +67,7 @@ impl Runtime {
         self.scope_stack.front_mut().unwrap().insert(name, object);
     }
 
-    pub fn resolve(&self, name: &str) -> Result {
+    pub fn resolve(&self, name: &str) -> Result<ObjectRef> {
         for scope in self.scope_stack.iter().rev() {
             if let Some(object) = scope.get(name) {
                 return Ok(object.clone());

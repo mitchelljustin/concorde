@@ -3,7 +3,7 @@ use pest::Parser;
 use pest_derive::Parser;
 
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Block, Call, Expression, Ident, LValue, Literal, Node,
+    Access, AnyNodeVariant, Assignment, Block, Call, Expression, Ident, LValue, Literal, Nil, Node,
     NodeVariant, Program, Statement, String as StringVariant, TopError, Variable,
 };
 
@@ -92,22 +92,23 @@ impl SourceParser {
                 let target = Box::new(self.parse_expression(target)?);
                 Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
             }
-            Rule::literal => Ok(self.parse_literal(pair)?),
+            Rule::literal => {
+                let literal = self.parse_literal(pair.clone())?;
+                Ok(Expression::Literal(literal).into_node(&pair))
+            }
             Rule::variable => Ok(Expression::Variable(self.parse_variable(&pair)).into_node(&pair)),
             rule => unreachable!("{rule:?}"),
         }
     }
 
-    fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+    fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Literal>> {
         match pair.as_rule() {
             Rule::literal => self.parse_literal(pair.into_inner().next().unwrap()),
-            Rule::string => Ok(Expression::Literal(
-                Literal::String(
-                    StringVariant {
-                        value: pair.clone().into_inner().next().unwrap().as_str().into(),
-                    }
-                    .into_node(&pair),
-                )
+            Rule::nil => Ok(Literal::Nil(Nil {}.into_node(&pair)).into_node(&pair)),
+            Rule::string => Ok(Literal::String(
+                StringVariant {
+                    value: pair.clone().into_inner().next().unwrap().as_str().into(),
+                }
                 .into_node(&pair),
             )
             .into_node(&pair)),

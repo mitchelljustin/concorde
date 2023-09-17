@@ -36,9 +36,9 @@ call = {
 }
 
 primary = {
+    literal |
     grouping |
-    variable |
-    literal
+    variable
 }
 
 grouping = {
@@ -66,7 +66,7 @@ bool = @{ "true" | "false" }
 nil = @{ "nil" }
 
 KEYWORD = @{
-    "class"
+    "class" | "true" | "false" | "nil"
 }
 
 ident = @{

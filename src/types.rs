@@ -23,7 +23,8 @@ pub type RcString = Rc<str>;
 
 #[derive(Debug, Clone)]
 pub struct Node<Variant: NodeVariant = AnyNodeVariant> {
-    pub(crate) source: RcString,
+    pub(crate) source: std::string::String,
+    pub(crate) rule: Rule,
     pub(crate) line_col: (usize, usize),
     pub(crate) v: Variant,
 }
@@ -31,7 +32,8 @@ pub struct Node<Variant: NodeVariant = AnyNodeVariant> {
 pub trait NodeVariant: Sized + Debug + Clone {
     fn into_node(self, pair: &Pair<Rule>) -> Node<Self> {
         Node {
-            source: pair.as_str().into(),
+            source: pair.as_str().to_string(),
+            rule: pair.as_rule(),
             line_col: pair.line_col(),
             v: self,
         }
@@ -77,6 +79,7 @@ define_node_types! {
     }
     Break {}
     Continue {}
+    Nil {}
     WhileLoop {
         condition: Node<Expression>,
         body: Node<Block>,
@@ -132,6 +135,7 @@ define_collector_enums! {
         String,
         Number,
         Boolean,
+        Nil,
     }
     LValue {
         Variable,
