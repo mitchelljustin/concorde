@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::{Rc, Weak};
 
 use crate::runtime::bootstrap::builtin;
@@ -42,23 +42,22 @@ impl PartialEq for Object {
     }
 }
 
+const DEFAULT_NAME: &str = "<anonymous>";
+
 impl Object {
-    pub fn get_name(&self) -> Option<RcString> {
-        let name_obj = self.properties.get(builtin::property::name)?.borrow();
-        let Some(Primitive::String(name)) = &name_obj.primitive else {
-            return None;
+    pub fn get_name(&self) -> RcString {
+        let Some(name_obj) = self.properties.get(builtin::property::name) else {
+            return DEFAULT_NAME.into();
         };
-        Some(name.clone())
+        let name_borrowed = name_obj.borrow();
+        let Some(Primitive::String(name)) = &name_borrowed.primitive else {
+            return DEFAULT_NAME.into();
+        };
+        name.clone()
     }
 
     pub fn debug(&self) -> String {
-        let class_name = self
-            .class
-            .as_ref()
-            .unwrap()
-            .borrow()
-            .get_name()
-            .expect("class has no __name__");
+        let class_name = self.class.as_ref().unwrap().borrow().get_name();
         let ptr = self.weak_self.as_ptr();
         format!("#<{} {:p}>", class_name, ptr)
     }
@@ -99,6 +98,10 @@ impl Debug for Object {
         f.debug_struct("Object")
             .field("ptr", &self.weak_self.as_ptr())
             .field("class_ptr", &self.class.as_ref().map(Rc::as_ptr))
+            .field(
+                "class_name",
+                &self.class.as_ref().map(|class| class.borrow().get_name()),
+            )
             .field("primitive", &self.primitive)
             .finish()
     }

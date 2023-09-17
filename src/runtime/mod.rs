@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
@@ -19,16 +21,27 @@ pub enum Error {
     DuplicateDefinition { class: ObjectRef, name: RcString },
     #[error("no such variable: '{name}'")]
     NoSuchVariable { name: RcString },
-    #[error("no such method on {class:?}: '{name}'")]
-    NoSuchMethod { class: ObjectRef, name: RcString },
+    #[error("no such method on {class_name}: '{method_name}'")]
+    NoSuchMethod {
+        class_name: RcString,
+        method_name: RcString,
+    },
+    #[error("arity mismatch for '{class_name}::{method_name}()': expected {expected} args, got {actual}")]
+    ArityMismatch {
+        class_name: RcString,
+        method_name: RcString,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct StackFrame {
     receiver: Option<ObjectRef>,
     class: Option<ObjectRef>,
+    method_name: Option<RcString>,
     variables: HashMap<RcString, ObjectRef>,
 }
 
@@ -72,6 +85,21 @@ impl Runtime {
         let string_obj = self.create_object(self.builtins.String.clone());
         string_obj.borrow_mut().primitive = Some(Primitive::String(value));
         string_obj
+    }
+
+    pub fn create_bool(&mut self, value: bool) -> ObjectRef {
+        if value {
+            &self.builtins.bool_true
+        } else {
+            &self.builtins.bool_false
+        }
+        .clone()
+    }
+
+    pub fn create_number(&mut self, value: f64) -> ObjectRef {
+        let number_obj = self.create_object(self.builtins.Number.clone());
+        number_obj.borrow_mut().primitive = Some(Primitive::Number(value));
+        number_obj
     }
 
     pub fn create_object(&mut self, class: ObjectRef) -> ObjectRef {

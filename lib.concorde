@@ -1,4 +1,6 @@
 def yolo(x)
     print(x)
 end
-print("hi")
+yolo("hi")
+yolo(nil)
+yolo(1.03)

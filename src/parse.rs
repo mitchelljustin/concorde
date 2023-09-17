@@ -1,10 +1,11 @@
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
+use std::num::ParseFloatError;
 
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Block, Call, Expression, Ident, LValue, Literal,
-    MethodDefinition, Nil, Node, NodeVariant, Parameter, Program, Statement,
+    Access, AnyNodeVariant, Assignment, Block, Boolean, Call, Expression, Ident, LValue, Literal,
+    MethodDefinition, Nil, Node, NodeVariant, Number, Parameter, Program, Statement,
     String as StringVariant, TopError, Variable,
 };
 
@@ -12,6 +13,8 @@ use crate::types::{
 pub enum Error {
     #[error("pest error: {0}")]
     Pest(#[from] pest::error::Error<Rule>),
+    #[error("parse float error: {0}")]
+    ParseFloat(#[from] ParseFloatError),
 }
 
 type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
@@ -132,6 +135,17 @@ impl SourceParser {
         match pair.as_rule() {
             Rule::literal => self.parse_literal(pair.into_inner().next().unwrap()),
             Rule::nil => Ok(Literal::Nil(Nil {}.into_node(&pair)).into_node(&pair)),
+            Rule::bool => Ok(Literal::Boolean(
+                Boolean {
+                    value: pair.as_str() == "true",
+                }
+                .into_node(&pair),
+            )
+            .into_node(&pair)),
+            Rule::number => {
+                let value: f64 = pair.as_str().parse()?;
+                Ok(Literal::Number(Number { value }.into_node(&pair)).into_node(&pair))
+            }
             Rule::string => Ok(Literal::String(
                 StringVariant {
                     value: pair.clone().into_inner().next().unwrap().as_str().into(),
