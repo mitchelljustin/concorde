@@ -10,6 +10,7 @@ use crate::types::{Block, Node, Primitive, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
+pub type MethodRef = Rc<Method>;
 
 pub type SystemMethod = fn(
     runtime: &mut Runtime,
@@ -36,10 +37,11 @@ pub struct Method {
 }
 
 pub struct Object {
-    pub(crate) class: Option<ObjectRef>,
+    pub(super) class: Option<ObjectRef>,
+    pub(super) superclass: Option<ObjectRef>,
     weak_self: WeakObjectRef,
     properties: HashMap<RcString, ObjectRef>,
-    methods: HashMap<RcString, Method>,
+    methods: HashMap<RcString, MethodRef>,
     primitive: Option<Primitive>,
 }
 
@@ -103,7 +105,7 @@ impl Object {
         self.properties.insert(name, value);
     }
 
-    pub fn get_property(&mut self, name: &str) -> Option<ObjectRef> {
+    pub fn get_property(&self, name: &str) -> Option<ObjectRef> {
         self.properties.get(name).cloned()
     }
 
@@ -133,14 +135,17 @@ impl Object {
             params,
             body,
         };
-        self.methods.insert(method_name, method);
+        self.methods.insert(method_name, Rc::new(method));
         Ok(())
     }
 
-    pub fn resolve_method(&self, name: &str) -> Option<&Method> {
+    pub fn resolve_method(&self, name: &str) -> Option<MethodRef> {
         if let Some(method) = self.methods.get(name) {
-            return Some(method);
+            return Some(method.clone());
         };
+        if let Some(superclass) = self.superclass.as_ref() {
+            return superclass.borrow().resolve_method(name);
+        }
         None
     }
 }
@@ -164,6 +169,7 @@ impl Object {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
                 class: None,
+                superclass: None,
                 primitive: None,
                 weak_self: weak_self.clone(),
                 properties: HashMap::new(),
@@ -176,6 +182,7 @@ impl Object {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
                 class: Some(class),
+                superclass: None,
                 primitive: None,
                 weak_self: weak_self.clone(),
                 properties: HashMap::new(),

@@ -47,7 +47,7 @@ impl Runtime {
                 }
             }
             Statement::ClassDefinition(class_def) => {
-                let class = self.create_class(class_def.v.name.v.name);
+                let class = self.create_simple_class(class_def.v.name.v.name);
                 self.stack.push(StackFrame {
                     class: Some(class),
                     ..StackFrame::default()
@@ -150,50 +150,41 @@ impl Runtime {
 
     fn perform_call(
         &mut self,
-        receiver: ObjectRef,
+        mut receiver: ObjectRef,
         method_name: RcString,
         arguments: Vec<ObjectRef>,
     ) -> Result<ObjectRef> {
-        if let Ok(class) = self.resolve(&method_name) && self.is_class(&class) {
-            let new_instance = self.create_object(class.clone());
-            let class_ref = class.borrow();
-            if let Some(init_method) = class_ref.resolve_method(builtin::method::init) {
-                self.perform_call(
-                    new_instance.clone(),
-                    init_method.name.clone(),
-                    arguments
-                )?;
-            } else if !arguments.is_empty() {
-                return Err(ArityMismatch {
-                    method_name: builtin::method::init.into(),
-                    class_name: class_ref.__name__().unwrap(),
-                    actual: arguments.len(),
-                    expected: 0,
-                });
-            }
-            return Ok(new_instance);
-        }
-        let class = receiver.borrow().__class__();
-        let class_ref = class.borrow();
-        let main = self.builtins.Main.clone();
-        let main_ref = main.borrow();
-        let method = if let Some(method) = class_ref.resolve_method(&method_name) {
-            method
-        } else if let Some(method) = main_ref.resolve_method(&method_name) {
-            method
+        let method;
+        let class;
+        if let Ok(class_var) = self.resolve(&method_name) && self.is_class(&class_var) {
+            class = class_var;
+            receiver = self.create_object(class.clone());
+            let Some(init_method) = class.borrow().resolve_method(builtin::method::init) else {
+                return Ok(receiver);
+            };
+            method = init_method;
         } else {
-            return Err(NoSuchMethod {
-                class_name: class_ref.__name__().unwrap_or("".into()),
-                method_name: method_name.clone(),
-            });
-        };
+            class = receiver.borrow().__class__();
+            let main = self.builtins.Main.clone();
+            let main_ref = main.borrow();
+            method = if let Some(method) = class.borrow().resolve_method(&method_name) {
+                method
+            } else if let Some(method) = main_ref.resolve_method(&method_name) {
+                method
+            } else {
+                return Err(NoSuchMethod {
+                    class_name: class.borrow().__name__().unwrap(),
+                    method_name: method_name.clone(),
+                });
+            };
+        }
         match &method.body {
             MethodBody::User(body) => {
                 if arguments.len() != method.params.len() {
                     return Err(ArityMismatch {
                         expected: method.params.len(),
                         actual: arguments.len(),
-                        class_name: class_ref.__name__().unwrap(),
+                        class_name: class.borrow().__name__().unwrap(),
                         method_name: method_name.clone(),
                     });
                 }

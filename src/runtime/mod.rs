@@ -125,14 +125,19 @@ impl Runtime {
         object
     }
 
-    pub fn create_class(&mut self, name: RcString) -> ObjectRef {
+    pub fn create_class(&mut self, name: RcString, superclass: Option<ObjectRef>) -> ObjectRef {
         let class = self.create_object(self.builtins.Class.clone());
+        class.borrow_mut().superclass = superclass;
         let name_obj = self.create_string(name.clone());
         class
             .borrow_mut()
             .set_property(builtin::property::__name__.into(), name_obj);
         self.assign_global(name, class.clone());
         class
+    }
+
+    pub fn create_simple_class(&mut self, name: RcString) -> ObjectRef {
+        self.create_class(name, Some(self.builtins.Object.clone()))
     }
 
     pub fn assign_global(&mut self, name: RcString, object: ObjectRef) {

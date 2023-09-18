@@ -10,6 +10,7 @@ pub mod builtin {
 
     pub mod class {
         pub const Class: &str = "Class";
+        pub const Object: &str = "Object";
         pub const String: &str = "String";
         pub const NilClass: &str = "NilClass";
         pub const Main: &str = "Main";
@@ -129,6 +130,7 @@ macro define_system_methods(
 
 define_builtins!(Builtins {
     Class,
+    Object,
     String,
     NilClass,
     Bool,
@@ -168,12 +170,17 @@ impl Runtime {
             .String
             .borrow_mut()
             .set_property(builtin::property::__name__.into(), name_String_obj);
+
+        self.builtins.Object = self.create_class(builtin::class::Object.into(), None);
+        self.builtins.String.borrow_mut().superclass = Some(self.builtins.Object.clone());
+        // now we can create simple classes
+
         // create nil
-        self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
+        self.builtins.NilClass = self.create_simple_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
 
         // create booleans
-        self.builtins.Bool = self.create_class(builtin::class::Bool.into());
+        self.builtins.Bool = self.create_simple_class(builtin::class::Bool.into());
         self.builtins.bool_true = self.create_object(self.builtins.Bool.clone());
         self.builtins
             .bool_true
@@ -186,10 +193,10 @@ impl Runtime {
             .set_primitive(Primitive::Boolean(false));
 
         // create number
-        self.builtins.Number = self.create_class(builtin::class::Number.into());
+        self.builtins.Number = self.create_simple_class(builtin::class::Number.into());
 
         // create main
-        self.builtins.Main = self.create_class(builtin::class::Main.into());
+        self.builtins.Main = self.create_simple_class(builtin::class::Main.into());
         let main = self.create_object(self.builtins.Main.clone());
         let root_frame = &mut self.stack[0];
         root_frame.receiver = Some(main);
