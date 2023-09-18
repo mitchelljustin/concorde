@@ -89,7 +89,7 @@ impl Runtime {
         match expression.v {
             Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
             Expression::Call(call) => {
-                let (method_name, arguments) = self.destructure_call(call)?;
+                let (method_name, arguments) = self.eval_call(call)?;
                 self.perform_call(self.current_receiver(), method_name, arguments)
             }
             Expression::Literal(literal) => self.eval_literal(literal),
@@ -108,14 +108,14 @@ impl Runtime {
             Expression::Binary(binary) => {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
-                let method_name = builtin::ops::method_for_binary_op(&binary.v.op);
+                let method_name = builtin::op::method_for_binary_op(&binary.v.op);
                 self.perform_call(lhs, method_name.into(), vec![rhs])
             }
             node => unimplemented!("{node:?}"),
         }
     }
 
-    fn destructure_call(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
+    fn eval_call(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
         let Call { target, arguments } = call.v;
         let arguments = arguments
             .into_iter()
@@ -144,7 +144,7 @@ impl Runtime {
                 });
             }
             Expression::Call(call) => {
-                let (method_name, arguments) = self.destructure_call(call)?;
+                let (method_name, arguments) = self.eval_call(call)?;
                 self.perform_call(target, method_name, arguments)
             }
             _ => unimplemented!(),
@@ -157,9 +157,23 @@ impl Runtime {
         method_name: RcString,
         arguments: Vec<ObjectRef>,
     ) -> Result<ObjectRef> {
-        if let Ok(object) = self.resolve(&method_name) && self.is_class(&object) {
-            let new_instance = self.create_object(object);
-            // TODO: arguments
+        if let Ok(class) = self.resolve(&method_name) && self.is_class(&class) {
+            let new_instance = self.create_object(class.clone());
+            let class_ref = class.borrow();
+            if let Some(init_method) = class_ref.methods.get(builtin::method::init) {
+                self.perform_call(
+                    new_instance.clone(),
+                    init_method.name.clone(),
+                    arguments
+                )?;
+            } else if !arguments.is_empty() {
+                return Err(ArityMismatch {
+                    method_name: builtin::method::init.into(),
+                    class_name: class_ref.__name__().unwrap(),
+                    actual: arguments.len(),
+                    expected: 0,
+                });
+            }
             return Ok(new_instance);
         }
         let class = receiver.borrow().__class__();

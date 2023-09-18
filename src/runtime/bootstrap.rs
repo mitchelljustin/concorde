@@ -21,8 +21,12 @@ pub mod builtin {
         pub const __name__: &str = "__name__";
         pub const __class__: &str = "__class__";
     }
+    
+    pub mod method {
+        pub const init: &str = "init";
+    }
 
-    pub mod ops {
+    pub mod op {
         use crate::types::Operator;
 
         pub const __add__: &str = "__add__";
