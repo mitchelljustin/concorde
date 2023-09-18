@@ -36,8 +36,8 @@ pub enum Error {
         member: RcString,
         access: NodeMeta,
     },
-    #[error("expression '{expr}' is not callable")]
-    NotCallable { expr: RcString },
+    #[error("expression is not callable: {expr}")]
+    NotCallable { expr: NodeMeta },
     #[error("illegal assignment target: '{target}.{member}'")]
     IllegalAssignmentTarget { target: RcString, member: RcString },
 }
@@ -93,7 +93,9 @@ impl Runtime {
 
     pub fn create_string(&mut self, value: RcString) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
-        string_obj.borrow_mut().primitive = Some(Primitive::String(value));
+        string_obj
+            .borrow_mut()
+            .set_primitive(Primitive::String(value));
         string_obj
     }
 
@@ -108,7 +110,9 @@ impl Runtime {
 
     pub fn create_number(&mut self, value: f64) -> ObjectRef {
         let number_obj = self.create_object(self.builtins.Number.clone());
-        number_obj.borrow_mut().primitive = Some(Primitive::Number(value));
+        number_obj
+            .borrow_mut()
+            .set_primitive(Primitive::Number(value));
         number_obj
     }
 
@@ -117,7 +121,7 @@ impl Runtime {
         object
             .borrow_mut()
             .set_property(builtin::property::__class__.into(), class);
-        self.all_objects.push(object.borrow().weak_self.clone());
+        self.all_objects.push(object.borrow().weak_self());
         object
     }
 

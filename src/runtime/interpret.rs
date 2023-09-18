@@ -121,9 +121,7 @@ impl Runtime {
             .map(|argument| self.eval(argument))
             .collect::<Result<Vec<_>, _>>()?;
         let Expression::Variable(var) = target.v else {
-            return Err(NotCallable {
-                expr: target.meta.source.into(),
-            });
+            return Err(NotCallable { expr: target.meta });
         };
         let method_name = var.ident.name.clone();
         Ok((method_name, arguments))
@@ -135,7 +133,7 @@ impl Runtime {
         match member.v {
             Expression::Variable(var) => {
                 let member = &var.ident.name;
-                let value = target.borrow().properties.get(member).cloned();
+                let value = target.borrow().get_property(member);
                 return value.ok_or(UndefinedProperty {
                     target: target.borrow().__debug__(),
                     member: member.clone(),
@@ -159,7 +157,7 @@ impl Runtime {
         if let Ok(class) = self.resolve(&method_name) && self.is_class(&class) {
             let new_instance = self.create_object(class.clone());
             let class_ref = class.borrow();
-            if let Some(init_method) = class_ref.methods.get(builtin::method::init) {
+            if let Some(init_method) = class_ref.resolve_method(builtin::method::init) {
                 self.perform_call(
                     new_instance.clone(),
                     init_method.name.clone(),
@@ -179,9 +177,9 @@ impl Runtime {
         let class_ref = class.borrow();
         let main = self.builtins.Main.clone();
         let main_ref = main.borrow();
-        let method = if let Some(method) = class_ref.methods.get(&method_name) {
+        let method = if let Some(method) = class_ref.resolve_method(&method_name) {
             method
-        } else if let Some(method) = main_ref.methods.get(&method_name) {
+        } else if let Some(method) = main_ref.resolve_method(&method_name) {
             method
         } else {
             return Err(NoSuchMethod {
@@ -195,7 +193,7 @@ impl Runtime {
                     return Err(ArityMismatch {
                         expected: method.params.len(),
                         actual: arguments.len(),
-                        class_name: class_ref.__name__().unwrap_or("".into()),
+                        class_name: class_ref.__name__().unwrap(),
                         method_name: method_name.clone(),
                     });
                 }

@@ -36,11 +36,11 @@ pub struct Method {
 }
 
 pub struct Object {
-    pub class: Option<ObjectRef>,
-    pub weak_self: WeakObjectRef,
-    pub properties: HashMap<RcString, ObjectRef>,
-    pub methods: HashMap<RcString, Method>,
-    pub primitive: Option<Primitive>,
+    class: Option<ObjectRef>,
+    weak_self: WeakObjectRef,
+    properties: HashMap<RcString, ObjectRef>,
+    methods: HashMap<RcString, Method>,
+    primitive: Option<Primitive>,
 }
 
 impl PartialEq for Object {
@@ -103,6 +103,18 @@ impl Object {
         self.properties.insert(name, value);
     }
 
+    pub fn get_property(&mut self, name: &str) -> Option<ObjectRef> {
+        self.properties.get(name).cloned()
+    }
+
+    pub fn weak_self(&self) -> WeakObjectRef {
+        self.weak_self.clone()
+    }
+
+    pub fn set_primitive(&mut self, primitive: Primitive) {
+        self.primitive = Some(primitive);
+    }
+
     pub fn define_method(
         &mut self,
         method_name: RcString,
@@ -123,6 +135,13 @@ impl Object {
         };
         self.methods.insert(method_name, method);
         Ok(())
+    }
+
+    pub fn resolve_method(&self, name: &str) -> Option<&Method> {
+        if let Some(method) = self.methods.get(name) {
+            return Some(method);
+        };
+        None
     }
 }
 
