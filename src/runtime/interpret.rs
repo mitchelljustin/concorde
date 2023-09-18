@@ -1,3 +1,4 @@
+use crate::runtime::bootstrap::builtin;
 use crate::runtime::object::{MethodBody, ObjectRef, Param};
 use crate::runtime::Error::{
     ArityMismatch, IllegalAssignmentTarget, NoSuchMethod, NotCallable, UndefinedProperty,
@@ -103,6 +104,12 @@ impl Runtime {
                     };
                 }
                 self.eval_block(if_else.v.then_body)
+            }
+            Expression::Binary(binary) => {
+                let lhs = self.eval(*binary.v.lhs)?;
+                let rhs = self.eval(*binary.v.rhs)?;
+                let method_name = builtin::ops::method_for_binary_op(&binary.v.op);
+                self.perform_call(lhs, method_name.into(), vec![rhs])
             }
             node => unimplemented!("{node:?}"),
         }

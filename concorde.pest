@@ -50,11 +50,79 @@ assignment = {
 
 expr = {
     if_else |
-    access
+    logical_or
 }
 
+logical_or = {
+    logical_and ~ (op_or ~ logical_and)*
+}
+
+logical_and = {
+    equality ~ (op_and ~ equality)*
+}
+
+equality = {
+    comparison ~ (op_equality ~ comparison)*
+}
+
+op_equality = _{
+    op_eq | op_neq
+}
+
+comparison = {
+    term ~ (op_comparison ~ term)*
+}
+
+op_comparison = _{
+    op_gt | op_gte | op_lt | op_lte
+}
+
+term = {
+    factor ~ (op_term ~ factor)*
+}
+
+op_term = _{ op_plus | op_minus }
+
+factor = {
+    logical_not ~ (op_factor ~ logical_not)*
+}
+
+op_factor = _{ op_star | op_slash }
+
+logical_not = {
+    op_not* ~ unary_minus
+}
+
+unary_minus = {
+    op_minus* ~ access
+}
+
+op_eq = { "==" }
+op_neq = { "!=" }
+op_gt = { ">" }
+op_gte = { ">=" }
+op_lt = { "<" }
+op_lte = { "<=" }
+op_minus = { "-" }
+op_plus = { "+" }
+op_star = { "*" }
+op_slash = { "/" }
+op_not = { "not" }
+op_or = { "or" }
+op_and = { "and" }
+
+// or
+// and
+// == !=
+// < > <= >=
+// + -
+// * /
+// not
+// (-)
+// primary
+
 if_else = {
-    "if" ~ expr ~ NEWLINE ~
+    "if" ~ logical_or ~ NEWLINE ~
         stmts ~
     ("else" ~ NEWLINE ~
         stmts)? ~

@@ -6,9 +6,9 @@ use pest_derive::Parser;
 
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Block, Boolean, Call, ClassDefinition, Expression, Ident,
-    IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Parameter,
-    Program, Statement, String as StringVariant, TopError, Variable,
+    Access, AnyNodeVariant, Assignment, Binary, Block, Boolean, Call, ClassDefinition, Expression,
+    Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number,
+    Operator, Parameter, Program, Statement, String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -105,9 +105,56 @@ impl SourceParser {
         .into_node(&pair))
     }
 
+    fn parse_operator(&mut self, pair: &Pair<Rule>) -> Operator {
+        match pair.as_rule() {
+            Rule::op_eq => Operator::EqualEqual,
+            Rule::op_neq => Operator::NotEqual,
+            Rule::op_gt => Operator::Greater,
+            Rule::op_gte => Operator::GreaterEqual,
+            Rule::op_lt => Operator::Less,
+            Rule::op_lte => Operator::LessEqual,
+            Rule::op_minus => Operator::Minus,
+            Rule::op_plus => Operator::Plus,
+            Rule::op_star => Operator::Star,
+            Rule::op_slash => Operator::Slash,
+            Rule::op_not => Operator::LogicalNot,
+            Rule::op_or => Operator::LogicalOr,
+            Rule::op_and => Operator::LogicalAnd,
+            rule => unreachable!("{rule:?}"),
+        }
+    }
+
+    fn parse_left_assoc(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        let mut inner = pair.clone().into_inner();
+        let mut lhs = self.parse_expression(inner.next().unwrap())?;
+        while let Ok([op, rhs]) = inner.next_chunk() {
+            let rhs = self.parse_expression(rhs)?;
+            let op = self.parse_operator(&op).into_node(&op);
+            lhs = Expression::Binary(
+                Binary {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                    op,
+                }
+                .into_node(&pair),
+            )
+            .into_node(&pair);
+        }
+        Ok(lhs)
+    }
+
     fn parse_expression(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
         match pair.as_rule() {
             Rule::expr | Rule::primary | Rule::grouping => {
+                self.parse_expression(pair.into_inner().next().unwrap())
+            }
+            Rule::logical_or
+            | Rule::logical_and
+            | Rule::equality
+            | Rule::comparison
+            | Rule::term
+            | Rule::factor => self.parse_left_assoc(pair),
+            Rule::logical_not | Rule::unary_minus => {
                 self.parse_expression(pair.into_inner().next().unwrap())
             }
             Rule::access => self.parse_access(pair),

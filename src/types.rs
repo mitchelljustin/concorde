@@ -66,6 +66,25 @@ impl<V: NodeVariant> Deref for Node<V> {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Operator {
+    EqualEqual,
+    NotEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    LogicalAnd,
+    LogicalOr,
+    LogicalNot,
+}
+
+impl NodeVariant for Operator {}
+
 define_node_types! {
     [AnyNodeVariant]
 
@@ -101,6 +120,11 @@ define_node_types! {
     WhileLoop {
         condition: Node<Expression>,
         body: Node<Block>,
+    }
+    Binary {
+        lhs: Box<Node<Expression>>,
+        op: Node<Operator>,
+        rhs: Box<Node<Expression>>,
     }
     Access {
         target: Box<Node<Expression>>,
@@ -153,6 +177,7 @@ define_collector_enums! {
         Literal,
         Variable,
         IfElse,
+        Binary,
     }
     Literal {
         String,

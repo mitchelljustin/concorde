@@ -21,6 +21,43 @@ pub mod builtin {
         pub const __name__: &str = "__name__";
         pub const __class__: &str = "__class__";
     }
+
+    pub mod ops {
+        use crate::types::Operator;
+
+        pub const __add__: &str = "__add__";
+        pub const __sub__: &str = "__sub__";
+        pub const __mul__: &str = "__mul__";
+        pub const __div__: &str = "__div__";
+        pub const __gt__: &str = "__gt__";
+        pub const __gte__: &str = "__gte__";
+        pub const __lt__: &str = "__lt__";
+        pub const __lte__: &str = "__lte__";
+        pub const __eq__: &str = "__eq__";
+        pub const __neq__: &str = "__neq__";
+        pub const __or__: &str = "__or__";
+        pub const __and__: &str = "__and__";
+        pub const __neg__: &str = "__neg__";
+        pub const __not__: &str = "__not__";
+
+        pub fn method_for_binary_op(op: &Operator) -> &str {
+            match op {
+                Operator::EqualEqual => __eq__,
+                Operator::NotEqual => __neq__,
+                Operator::Greater => __gt__,
+                Operator::GreaterEqual => __gte__,
+                Operator::Less => __lt__,
+                Operator::LessEqual => __lte__,
+                Operator::Plus => __add__,
+                Operator::Minus => __sub__,
+                Operator::Star => __mul__,
+                Operator::Slash => __div__,
+                Operator::LogicalAnd => __and__,
+                Operator::LogicalOr => __or__,
+                Operator::LogicalNot => __not__,
+            }
+        }
+    }
 }
 
 macro define_builtins(
@@ -152,6 +189,56 @@ impl Runtime {
     fn bootstrap_stdlib(&mut self) {
         define_system_methods!(
             [class=self.builtins.Number, runtime=runtime, method_name=method_name, this=this]
+            fn __eq__(other) {
+                let result = this.borrow().number().unwrap() == other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __neq__(other) {
+                let result = this.borrow().number().unwrap() != other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __lt__(other) {
+                let result = this.borrow().number().unwrap() < other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __lte__(other) {
+                let result = this.borrow().number().unwrap() <= other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __gt__(other) {
+                let result = this.borrow().number().unwrap() > other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __gte__(other) {
+                let result = this.borrow().number().unwrap() >= other.borrow().number().unwrap();
+                runtime.create_bool(result)
+            }
+
+            fn __add__(other) {
+                let result = this.borrow().number().unwrap() + other.borrow().number().unwrap();
+                runtime.create_number(result)
+            }
+
+            fn __sub__(other) {
+                let result = this.borrow().number().unwrap() - other.borrow().number().unwrap();
+                runtime.create_number(result)
+            }
+
+            fn __mul__(other) {
+                let result = this.borrow().number().unwrap() * other.borrow().number().unwrap();
+                runtime.create_number(result)
+            }
+
+            fn __div__(other) {
+                let result = this.borrow().number().unwrap() / other.borrow().number().unwrap();
+                runtime.create_number(result)
+            }
+
             fn round() {
                 let result = this.borrow().number().unwrap().round();
                 runtime.create_number(result)
