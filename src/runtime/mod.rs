@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchVariable;
-use crate::types::{Primitive, RcString};
+use crate::types::{NodeMeta, Primitive, RcString};
 
 mod bootstrap;
 mod interpret;
@@ -31,8 +31,12 @@ pub enum Error {
         expected: usize,
         actual: usize,
     },
-    #[error("object {target} has no property '{member}'")]
-    UndefinedProperty { target: RcString, member: RcString },
+    #[error("object {target} has no property '{member}'\n    {access}")]
+    UndefinedProperty {
+        target: RcString,
+        member: RcString,
+        access: NodeMeta,
+    },
     #[error("expression '{expr}' is not callable")]
     NotCallable { expr: RcString },
     #[error("illegal assignment target: '{target}.{member}'")]

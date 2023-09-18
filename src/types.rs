@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -26,6 +26,13 @@ pub struct NodeMeta {
     pub source: std::string::String,
     pub rule: Rule,
     pub line_col: (usize, usize),
+}
+
+impl Display for NodeMeta {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let NodeMeta { source, rule, line_col: (line, col) } = self;
+        write!(f, "'{source}' at {line}:{col} ({rule:?})")
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -7,8 +7,8 @@ use pest_derive::Parser;
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
     Access, AnyNodeVariant, Assignment, Block, Boolean, Call, ClassDefinition, Expression, Ident,
-    LValue, Literal, MethodDefinition, Nil, Node, NodeVariant, Number, Parameter, Program,
-    Statement, String as StringVariant, TopError, Variable,
+    LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Parameter,
+    Program, Statement, String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -18,7 +18,7 @@ pub enum Error {
     #[error("parse float error: {0}")]
     ParseFloat(#[from] ParseFloatError),
     #[error("illegal lvalue for assignment: {lvalue}")]
-    IllegalLValue { lvalue: String },
+    IllegalLValue { lvalue: NodeMeta },
 }
 
 type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
@@ -186,7 +186,7 @@ impl SourceParser {
                     Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
                     _ => {
                         return Err(IllegalLValue {
-                            lvalue: lvalue.meta.source,
+                            lvalue: lvalue.meta,
                         })
                     }
                 }

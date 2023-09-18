@@ -5,15 +5,15 @@
 //
 
 program = {
-    stmts
+    stmts_required
+}
+
+stmts_required = {
+    (stmt? ~ NEWLINE)+
 }
 
 stmts = {
-    (stmt ~ NEWLINE)+
-}
-
-optional_stmts = {
-    (stmt ~ NEWLINE)*
+    (stmt? ~ NEWLINE)*
 }
 
 stmt = {
@@ -25,13 +25,13 @@ stmt = {
 
 method_def = {
     "def" ~ ident ~ param_list ~ NEWLINE ~
-        optional_stmts ~
+        stmts ~
     "end"
 }
 
 class_def = {
     "class" ~ ident ~ NEWLINE ~
-        optional_stmts ~
+        stmts ~
     "end"
 }
 

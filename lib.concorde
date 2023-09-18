@@ -2,7 +2,12 @@ class Some
     def greet(input)
         print(self.name, input)
     end
+
+    def crash()
+        print(self.non_existent_property)
+    end
 end
 some = Some()
 some.name = "Mitch"
 some.greet("swag")
+some.crash()

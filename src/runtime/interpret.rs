@@ -122,6 +122,7 @@ impl Runtime {
                 return value.ok_or(UndefinedProperty {
                     target: target.borrow().__debug__(),
                     member: member.clone(),
+                    access: access.meta,
                 });
             }
             Expression::Call(call) => {
