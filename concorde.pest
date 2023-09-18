@@ -49,8 +49,18 @@ assignment = {
 }
 
 expr = {
+    if_else |
     access
 }
+
+if_else = {
+    "if" ~ expr ~ NEWLINE ~
+        stmts ~
+    ("else" ~ NEWLINE ~
+        stmts)? ~
+    "end"
+}
+
 // a.b -> access(ident, ident)
 // a.b() -> call(access(ident, ident))
 // a().b() -> call(access(call(ident), ident))
@@ -93,7 +103,7 @@ bool = @{ "true" | "false" }
 nil = @{ "nil" }
 
 KEYWORD = @{
-    "class" | "true" | "false" | "nil" | "def" | "end"
+    "class" | "true" | "false" | "nil" | "def" | "end" | "if" | "else"
 }
 
 ident = @{

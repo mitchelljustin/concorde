@@ -30,7 +30,11 @@ pub struct NodeMeta {
 
 impl Display for NodeMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let NodeMeta { source, rule, line_col: (line, col) } = self;
+        let NodeMeta {
+            source,
+            rule,
+            line_col: (line, col),
+        } = self;
         write!(f, "'{source}' at {line}:{col} ({rule:?})")
     }
 }
@@ -82,7 +86,7 @@ define_node_types! {
         body: Node<Block>,
     }
     IfElse {
-        condition: Node<Expression>,
+        condition: Box<Node<Expression>>,
         then_body: Node<Block>,
         else_body: Option<Node<Block>>,
     }
@@ -133,7 +137,6 @@ define_node_types! {
 
 define_collector_enums! {
     Statement {
-        IfElse,
         ForLoop,
         WhileLoop,
         Break,
@@ -149,6 +152,7 @@ define_collector_enums! {
         Call,
         Literal,
         Variable,
+        IfElse,
     }
     Literal {
         String,

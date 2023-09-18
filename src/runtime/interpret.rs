@@ -93,6 +93,17 @@ impl Runtime {
             }
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
+            Expression::IfElse(if_else) => {
+                let condition = self.eval(*if_else.v.condition)?;
+                if condition == self.builtins.bool_false || condition == self.builtins.nil {
+                    return if let Some(else_body) = if_else.v.else_body {
+                        self.eval_block(else_body)
+                    } else {
+                        Ok(self.nil())
+                    };
+                }
+                self.eval_block(if_else.v.then_body)
+            }
             node => unimplemented!("{node:?}"),
         }
     }

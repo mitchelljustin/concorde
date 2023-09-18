@@ -1,6 +1,8 @@
 class Some
     def greet(input)
-        print(self.name, input)
+        if self.should_print
+            print(self.name, input)
+        end
     end
 
     def crash()
@@ -8,6 +10,9 @@ class Some
     end
 end
 some = Some()
+some.should_print = false
 some.name = "Mitch"
 some.greet("swag")
-some.crash()
+some.greet("swag")
+some.should_print = true
+some.greet("swag")

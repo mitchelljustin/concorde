@@ -7,7 +7,7 @@ use pest_derive::Parser;
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
     Access, AnyNodeVariant, Assignment, Block, Boolean, Call, ClassDefinition, Expression, Ident,
-    LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Parameter,
+    IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Parameter,
     Program, Statement, String as StringVariant, TopError, Variable,
 };
 
@@ -127,6 +127,25 @@ impl SourceParser {
             }
             Rule::variable => {
                 Ok(Expression::Variable(self.parse_variable(&pair)?).into_node(&pair))
+            }
+            Rule::if_else => {
+                let mut inner = pair.clone().into_inner();
+                let [condition, then_body] = inner.next_chunk().unwrap();
+                let condition = Box::new(self.parse_expression(condition)?);
+                let then_body = self.parse_block(then_body)?;
+                let else_body = inner
+                    .next()
+                    .map(|else_body| self.parse_block(else_body))
+                    .transpose()?;
+                Ok(Expression::IfElse(
+                    IfElse {
+                        condition,
+                        then_body,
+                        else_body,
+                    }
+                    .into_node(&pair),
+                )
+                .into_node(&pair))
             }
             rule => unreachable!("{rule:?}"),
         }
