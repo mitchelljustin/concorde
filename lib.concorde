@@ -1,7 +1,4 @@
-def yolo(x)
-    print(x)
-end
-yolo("hi")
-yolo(nil)
-yolo(1.03)
-yolo(yolo(true))
+one = "one"
+two = "two"
+res = one.concat(two)
+print(res)

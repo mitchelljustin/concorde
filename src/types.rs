@@ -22,19 +22,26 @@ pub enum TopError {
 pub type RcString = Rc<str>;
 
 #[derive(Debug, Clone)]
+pub struct NodeMeta {
+    pub source: std::string::String,
+    pub rule: Rule,
+    pub line_col: (usize, usize),
+}
+
+#[derive(Debug, Clone)]
 pub struct Node<Variant: NodeVariant = AnyNodeVariant> {
-    pub(crate) source: std::string::String,
-    pub(crate) rule: Rule,
-    pub(crate) line_col: (usize, usize),
-    pub(crate) v: Variant,
+    pub meta: NodeMeta,
+    pub v: Variant,
 }
 
 pub trait NodeVariant: Sized + Debug + Clone {
     fn into_node(self, pair: &Pair<Rule>) -> Node<Self> {
         Node {
-            source: pair.as_str().to_string(),
-            rule: pair.as_rule(),
-            line_col: pair.line_col(),
+            meta: NodeMeta {
+                source: pair.as_str().to_string(),
+                rule: pair.as_rule(),
+                line_col: pair.line_col(),
+            },
             v: self,
         }
     }

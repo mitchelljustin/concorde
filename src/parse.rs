@@ -92,7 +92,9 @@ impl SourceParser {
 
     fn parse_expression(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
         match pair.as_rule() {
-            Rule::expr | Rule::primary => self.parse_expression(pair.into_inner().next().unwrap()),
+            Rule::expr | Rule::primary | Rule::grouping => {
+                self.parse_expression(pair.into_inner().next().unwrap())
+            }
             Rule::access => {
                 let mut inner = pair.clone().into_inner();
                 let target = inner.next().unwrap();

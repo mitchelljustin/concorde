@@ -1,8 +1,6 @@
-use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
-use std::fmt::{Display, Formatter};
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::ControlFlow;
-use std::rc::Rc;
 
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
@@ -33,6 +31,10 @@ pub enum Error {
         expected: usize,
         actual: usize,
     },
+    #[error("object {target} has no property '{member}'")]
+    UndefinedProperty { target: RcString, member: RcString },
+    #[error("expression '{expr}' is not callable")]
+    NotCallable { expr: RcString },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -48,14 +50,14 @@ pub struct StackFrame {
 pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
     builtins: Builtins,
-    stack: VecDeque<StackFrame>,
+    stack: Vec<StackFrame>,
 }
 
 impl Runtime {
     pub fn new() -> Self {
         let mut runtime = Self {
             all_objects: Vec::new(),
-            stack: VecDeque::from([StackFrame::default()]),
+            stack: Vec::from([StackFrame::default()]),
             builtins: Builtins::default(),
         };
         runtime.bootstrap();
@@ -103,7 +105,10 @@ impl Runtime {
     }
 
     pub fn create_object(&mut self, class: ObjectRef) -> ObjectRef {
-        let object = Object::new_of_class(class);
+        let object = Object::new_of_class(class.clone());
+        object
+            .borrow_mut()
+            .set_property(builtin::property::class.into(), class);
         self.all_objects.push(object.borrow().weak_self.clone());
         object
     }
@@ -119,11 +124,7 @@ impl Runtime {
     }
 
     pub fn assign_global(&mut self, name: RcString, object: ObjectRef) {
-        self.stack
-            .front_mut()
-            .unwrap()
-            .variables
-            .insert(name, object);
+        self.stack[0].variables.insert(name, object);
     }
 
     pub fn resolve(&self, name: &str) -> Result<ObjectRef> {
@@ -136,7 +137,7 @@ impl Runtime {
 
     pub fn assign(&mut self, name: RcString, object: ObjectRef) {
         self.stack
-            .back_mut()
+            .last_mut()
             .expect("no scope")
             .variables
             .insert(name, object);

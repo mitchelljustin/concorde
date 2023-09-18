@@ -91,7 +91,7 @@ KEYWORD = @{
 
 ident = @{
     !(KEYWORD ~ !XID_START) ~
-    XID_START ~ XID_CONTINUE*
+    (XID_START | "_") ~ XID_CONTINUE*
 }
 
 number = @{

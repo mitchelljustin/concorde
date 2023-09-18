@@ -11,9 +11,16 @@ use crate::types::{Block, Node, Primitive, RcString};
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
 
+pub type SystemMethod = fn(
+    runtime: &mut Runtime,
+    this: ObjectRef,
+    method_name: RcString,
+    arguments: Vec<ObjectRef>,
+) -> Result<ObjectRef>;
+
 pub enum MethodBody {
     User(Node<Block>),
-    System(fn(&Runtime, ObjectRef, Vec<ObjectRef>) -> ObjectRef),
+    System(SystemMethod),
 }
 
 pub enum Param {
@@ -42,24 +49,54 @@ impl PartialEq for Object {
     }
 }
 
-const DEFAULT_NAME: &str = "<anonymous>";
+const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
-    pub fn get_name(&self) -> RcString {
-        let Some(name_obj) = self.properties.get(builtin::property::name) else {
-            return DEFAULT_NAME.into();
-        };
-        let name_borrowed = name_obj.borrow();
-        let Some(Primitive::String(name)) = &name_borrowed.primitive else {
-            return DEFAULT_NAME.into();
-        };
-        name.clone()
+    pub fn __name__(&self) -> Option<RcString> {
+        Some(
+            self.properties
+                .get(builtin::property::name)?
+                .borrow()
+                .string()?
+                .clone(),
+        )
     }
 
-    pub fn debug(&self) -> String {
-        let class_name = self.class.as_ref().unwrap().borrow().get_name();
+    pub fn __debug__(&self) -> RcString {
+        let class_name = self
+            .class
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .__name__()
+            .unwrap_or(DEFAULT_NAME.into());
         let ptr = self.weak_self.as_ptr();
-        format!("#<{} {:p}>", class_name, ptr)
+        format!("#<{} {:p}>", class_name, ptr).into()
+    }
+
+    pub fn __class__(&self) -> ObjectRef {
+        self.class.as_ref().unwrap().clone()
+    }
+
+    pub fn number(&self) -> Option<f64> {
+        let Primitive::Number(value) = self.primitive.clone().unwrap() else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn string(&self) -> Option<RcString> {
+        let Primitive::String(value) = self.primitive.clone().unwrap() else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn bool(&self) -> Option<bool> {
+        let Primitive::Boolean(value) = self.primitive.clone().unwrap() else {
+            return None;
+        };
+        Some(value)
     }
 
     pub fn set_property(&mut self, name: RcString, value: ObjectRef) {
@@ -100,7 +137,7 @@ impl Debug for Object {
             .field("class_ptr", &self.class.as_ref().map(Rc::as_ptr))
             .field(
                 "class_name",
-                &self.class.as_ref().map(|class| class.borrow().get_name()),
+                &self.class.as_ref().map(|class| class.borrow().__name__()),
             )
             .field("primitive", &self.primitive)
             .finish()

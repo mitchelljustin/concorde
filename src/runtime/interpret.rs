@@ -1,8 +1,10 @@
 use crate::runtime::object::{MethodBody, ObjectRef, Param};
-use crate::runtime::Error::{ArityMismatch, NoSuchMethod};
+use crate::runtime::Error::{ArityMismatch, NoSuchMethod, NotCallable, UndefinedProperty};
 use crate::runtime::Runtime;
 use crate::runtime::{Result, StackFrame};
-use crate::types::{Block, Call, Expression, LValue, Literal, Node, Program, Statement};
+use crate::types::{
+    Access, Block, Call, Expression, LValue, Literal, Node, Program, RcString, Statement,
+};
 
 impl Runtime {
     pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
@@ -45,39 +47,72 @@ impl Runtime {
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
             Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
-            Expression::Call(call) => self.perform_call(call),
+            Expression::Call(call) => {
+                let (method_name, arguments) = self.destructure_call(call)?;
+                self.perform_call(self.receiver(), method_name, arguments)
+            }
             Expression::Literal(literal) => self.eval_literal(literal),
-
+            Expression::Access(access) => self.eval_access(access),
             node => unimplemented!("{node:?}"),
         }
     }
 
-    fn perform_call(&mut self, call: Node<Call>) -> Result<ObjectRef> {
+    fn destructure_call(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
         let Call { target, arguments } = call.v;
-        let Expression::Variable(method_name) = target.v else {
-            unimplemented!();
-        };
-        let method_name = &method_name.ident.name;
-        let receiver = self.receiver();
-        let class = receiver.borrow().class();
-        let class_borrowed = class.borrow();
-        let Some(method) = class_borrowed.methods.get(method_name) else {
-            return Err(NoSuchMethod {
-                class_name: class.borrow().get_name(),
-                method_name: method_name.clone(),
-            });
-        };
         let arguments = arguments
             .into_iter()
             .map(|argument| self.eval(argument))
             .collect::<Result<Vec<_>, _>>()?;
+        let Expression::Variable(var) = target.v else {
+            return Err(NotCallable {
+                expr: target.meta.source.into(),
+            });
+        };
+        let method_name = var.ident.name.clone();
+        Ok((method_name, arguments))
+    }
+
+    fn eval_access(&mut self, access: Node<Access>) -> Result<ObjectRef> {
+        let Access { target, member } = access.v;
+        let target = self.eval(*target)?;
+        match member.v {
+            Expression::Variable(var) => {
+                let member = &var.ident.name;
+                let value = target.borrow().properties.get(member).cloned();
+                return value.ok_or(UndefinedProperty {
+                    target: target.borrow().__debug__(),
+                    member: member.clone(),
+                });
+            }
+            Expression::Call(call) => {
+                let (method_name, arguments) = self.destructure_call(call)?;
+                self.perform_call(target, method_name, arguments)
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn perform_call(
+        &mut self,
+        receiver: ObjectRef,
+        method_name: RcString,
+        arguments: Vec<ObjectRef>,
+    ) -> Result<ObjectRef> {
+        let class = receiver.borrow().class();
+        let class_borrowed = class.borrow();
+        let Some(method) = class_borrowed.methods.get(&method_name) else {
+            return Err(NoSuchMethod {
+                class_name: class.borrow().__name__().unwrap_or("".into()),
+                method_name: method_name.clone(),
+            });
+        };
         match &method.body {
             MethodBody::User(body) => {
                 if arguments.len() != method.params.len() {
                     return Err(ArityMismatch {
                         expected: method.params.len(),
                         actual: arguments.len(),
-                        class_name: class.borrow().get_name(),
+                        class_name: class.borrow().__name__().unwrap_or("".into()),
                         method_name: method_name.clone(),
                     });
                 }
@@ -92,17 +127,19 @@ impl Runtime {
                         (name.clone(), arg)
                     })
                     .collect();
-                self.stack.push_back(StackFrame {
+                self.stack.push(StackFrame {
                     receiver: Some(receiver),
                     method_name: Some(method_name.clone()),
                     variables,
                     ..StackFrame::default()
                 });
                 let result = self.eval_block(body.clone());
-                self.stack.pop_back();
+                self.stack.pop();
                 result
             }
-            MethodBody::System(function) => Ok(function(self, receiver.clone(), arguments)),
+            MethodBody::System(function) => {
+                function(self, receiver.clone(), method_name.clone(), arguments)
+            }
         }
     }
 

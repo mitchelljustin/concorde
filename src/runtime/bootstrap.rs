@@ -1,6 +1,8 @@
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param};
+use crate::runtime::Error::ArityMismatch;
 use crate::runtime::Runtime;
 use crate::types::{Primitive, RcString};
+use std::ops::Add;
 
 #[allow(non_upper_case_globals)]
 pub mod builtin {
@@ -17,6 +19,7 @@ pub mod builtin {
 
     pub mod property {
         pub const name: &str = "__name__";
+        pub const class: &str = "__class__";
     }
 }
 
@@ -45,6 +48,44 @@ macro define_builtins(
     }
 }
 
+macro replace_expr($_t:tt $sub:expr) {
+    $sub
+}
+
+macro count($($tts:tt)*) {0usize $(+ replace_expr!($tts 1usize))*}
+
+macro define_system_methods(
+    [class = $class:expr, runtime = $runtime:ident, method_name=$method_name:ident, this = $this:ident]
+    $(
+        fn $name:ident($($param:ident),*) $body:tt
+    )+
+) {
+    {
+        let mut class_mut = $class.borrow_mut();
+        $(
+            let params = vec![$(
+                Param::Positional(stringify!($param).into()),
+            )*];
+            class_mut.define_method(
+                stringify!($name).into(),
+                params,
+                MethodBody::System(|$runtime, $this, $method_name, args| {
+                    let arg_count = args.len();
+                    let Ok([$($param,)*]) = <[ObjectRef; count!($($param)*)]>::try_from(args) else {
+                        return Err(ArityMismatch {
+                            class_name: $this.borrow().__class__().borrow().__name__().unwrap(),
+                            method_name: $method_name,
+                            expected: count!($($param)*),
+                            actual: arg_count,
+                        });
+                    };
+                    Ok($body)
+                })
+            ).unwrap();
+        )+
+    }
+}
+
 define_builtins!(Builtins {
     Class,
     String,
@@ -61,7 +102,7 @@ define_builtins!(Builtins {
 impl Runtime {
     pub(crate) fn bootstrap(&mut self) {
         self.bootstrap_classes_and_objects();
-        self.bootstrap_std_methods();
+        self.bootstrap_stdlib();
     }
 
     fn bootstrap_classes_and_objects(&mut self) {
@@ -86,7 +127,6 @@ impl Runtime {
             .String
             .borrow_mut()
             .set_property(builtin::property::name.into(), name_String_obj);
-
         // create nil
         self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
@@ -104,49 +144,77 @@ impl Runtime {
         // create main
         self.builtins.Main = self.create_class(builtin::class::Main.into());
         let main = self.create_object(self.builtins.Main.clone());
-        let global_scope = self.stack.front_mut().unwrap();
-        global_scope.receiver = Some(main);
-        global_scope.class = Some(self.builtins.Main.clone());
+        let root_frame = &mut self.stack[0];
+        root_frame.receiver = Some(main);
+        root_frame.class = Some(self.builtins.Main.clone());
     }
 
-    fn bootstrap_std_methods(&mut self) {
+    fn bootstrap_stdlib(&mut self) {
+        define_system_methods!(
+            [class=self.builtins.Number, runtime=runtime, method_name=method_name, this=this]
+            fn round() {
+                let result = this.borrow().number().unwrap().round();
+                runtime.create_number(result)
+            }
+
+            fn ceil() {
+                let result = this.borrow().number().unwrap().ceil();
+                runtime.create_number(result)
+            }
+
+            fn floor() {
+                let result = this.borrow().number().unwrap().floor();
+                runtime.create_number(result)
+            }
+
+            fn pow(power) {
+                let power = power.borrow().number().unwrap();
+                let result = this.borrow().number().unwrap().powf(power);
+                runtime.create_number(result)
+            }
+        );
+        define_system_methods!(
+            [class=self.builtins.String, runtime=runtime, method_name=method_name, this=this]
+            fn trim() {
+                let result = this.borrow().string().unwrap().trim().into();
+                runtime.create_string(result)
+            }
+
+            fn concat(other) {
+                let me = this.borrow().string().unwrap();
+                let other: RcString = other.borrow().string().unwrap();
+                let result = String::from(me.as_ref()).add(other.as_ref()).into();
+                runtime.create_string(result)
+            }
+        );
         self.builtins
             .Main
             .borrow_mut()
             .define_method(
                 "print".into(),
                 vec![Param::Vararg("args".into())],
-                MethodBody::System(|runtime, _this, args| {
+                MethodBody::System(|runtime, _this, _method_name, args| {
                     let arg_count = args.len();
                     for (i, arg) in args.into_iter().enumerate() {
                         let arg_borrowed = arg.borrow();
-                        let arg_class = arg_borrowed.class.as_ref().unwrap();
-                        if arg_class == &runtime.builtins.String {
-                            let Some(Primitive::String(string)) = &arg_borrowed.primitive else {
-                                unreachable!();
-                            };
-                            print!("{string}")
-                        } else if arg_class == &runtime.builtins.Number {
-                            let Some(Primitive::Number(value)) = &arg_borrowed.primitive else {
-                                unreachable!();
-                            };
-                            print!("{value}")
-                        } else if arg_class == &runtime.builtins.Bool {
-                            let Some(Primitive::Boolean(value)) = &arg_borrowed.primitive else {
-                                unreachable!();
-                            };
-                            print!("{value}")
+                        let arg_class = arg_borrowed.__class__();
+                        if arg_class == runtime.builtins.String {
+                            print!("{}", arg_borrowed.string().unwrap());
+                        } else if arg_class == runtime.builtins.Number {
+                            print!("{}", arg_borrowed.number().unwrap());
+                        } else if arg_class == runtime.builtins.Bool {
+                            print!("{}", arg_borrowed.bool().unwrap());
                         } else if arg == runtime.builtins.nil {
-                            print!("nil")
-                        } else {
-                            unimplemented!();
+                            print!("nil");
+                        } else if arg_class == runtime.builtins.Class {
+                            print!("{}", arg_borrowed.__name__().unwrap());
                         }
                         if i < arg_count - 1 {
                             print!(" ");
                         }
                     }
                     println!();
-                    runtime.nil()
+                    Ok(runtime.nil())
                 }),
             )
             .unwrap();
