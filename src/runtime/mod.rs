@@ -19,7 +19,7 @@ pub enum Error {
     DuplicateDefinition { class: ObjectRef, name: RcString },
     #[error("no such variable: '{name}'")]
     NoSuchVariable { name: RcString },
-    #[error("no such method on {class_name}: '{method_name}'")]
+    #[error("no such method: '{class_name}::{method_name}'")]
     NoSuchMethod {
         class_name: RcString,
         method_name: RcString,
@@ -64,7 +64,10 @@ impl Runtime {
         runtime
     }
 
-    fn find_closest<T: Clone>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<T> {
+    fn find_closest(
+        &self,
+        finder: impl Fn(&StackFrame) -> Option<&ObjectRef>,
+    ) -> Option<ObjectRef> {
         for frame in self.stack.iter().rev() {
             if let Some(found) = finder(&frame) {
                 return Some(found.clone());
@@ -73,12 +76,12 @@ impl Runtime {
         None
     }
 
-    fn class(&self) -> ObjectRef {
+    fn current_class(&self) -> ObjectRef {
         self.find_closest(|frame| frame.class.as_ref())
             .expect("no class")
     }
 
-    fn receiver(&self) -> ObjectRef {
+    fn current_receiver(&self) -> ObjectRef {
         self.find_closest(|frame| frame.receiver.as_ref())
             .expect("no receiver")
     }
@@ -108,7 +111,7 @@ impl Runtime {
         let object = Object::new_of_class(class.clone());
         object
             .borrow_mut()
-            .set_property(builtin::property::class.into(), class);
+            .set_property(builtin::property::__class__.into(), class);
         self.all_objects.push(object.borrow().weak_self.clone());
         object
     }
@@ -118,7 +121,7 @@ impl Runtime {
         let name_obj = self.create_string(name.clone());
         class
             .borrow_mut()
-            .set_property(builtin::property::name.into(), name_obj);
+            .set_property(builtin::property::__name__.into(), name_obj);
         self.assign_global(name, class.clone());
         class
     }
@@ -129,7 +132,7 @@ impl Runtime {
 
     pub fn resolve(&self, name: &str) -> Result<ObjectRef> {
         if name == builtin::SELF {
-            return Ok(self.receiver());
+            return Ok(self.current_receiver());
         }
         self.find_closest(|frame| frame.variables.get(name))
             .ok_or(NoSuchVariable { name: name.into() })

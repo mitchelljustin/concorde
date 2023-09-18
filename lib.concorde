@@ -1,4 +1,8 @@
-one = "one"
-two = "two"
-res = one.concat(two)
-print(res)
+class Some
+    def me(input)
+        print(input)
+    end
+end
+some = Some()
+some.me("swag")
+

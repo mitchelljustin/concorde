@@ -19,11 +19,18 @@ optional_stmts = {
 stmt = {
     assignment |
     method_def |
+    class_def |
     expr
 }
 
 method_def = {
     "def" ~ ident ~ param_list ~ NEWLINE ~
+        optional_stmts ~
+    "end"
+}
+
+class_def = {
+    "class" ~ ident ~ NEWLINE ~
         optional_stmts ~
     "end"
 }

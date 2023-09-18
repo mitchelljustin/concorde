@@ -18,8 +18,8 @@ pub mod builtin {
     }
 
     pub mod property {
-        pub const name: &str = "__name__";
-        pub const class: &str = "__class__";
+        pub const __name__: &str = "__name__";
+        pub const __class__: &str = "__class__";
     }
 }
 
@@ -122,11 +122,11 @@ impl Runtime {
         let name_String_obj = self.create_string(name_String);
         Class
             .borrow_mut()
-            .set_property(builtin::property::name.into(), name_Class_obj);
+            .set_property(builtin::property::__name__.into(), name_Class_obj);
         self.builtins
             .String
             .borrow_mut()
-            .set_property(builtin::property::name.into(), name_String_obj);
+            .set_property(builtin::property::__name__.into(), name_String_obj);
         // create nil
         self.builtins.NilClass = self.create_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());

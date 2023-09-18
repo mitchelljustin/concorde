@@ -1,12 +1,13 @@
+use std::num::ParseFloatError;
+
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
-use std::num::ParseFloatError;
 
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Block, Boolean, Call, Expression, Ident, LValue, Literal,
-    MethodDefinition, Nil, Node, NodeVariant, Number, Parameter, Program, Statement,
-    String as StringVariant, TopError, Variable,
+    Access, AnyNodeVariant, Assignment, Block, Boolean, Call, ClassDefinition, Expression, Ident,
+    LValue, Literal, MethodDefinition, Nil, Node, NodeVariant, Number, Parameter, Program,
+    Statement, String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -63,31 +64,42 @@ impl SourceParser {
                         .into_node(&pair),
                 )
             }
-            Rule::method_def => {
-                let [name, param_list, body] = pair.clone().into_inner().next_chunk().unwrap();
+            Rule::class_def => {
+                let [name, body] = pair.clone().into_inner().next_chunk().unwrap();
                 let name = self.parse_ident(&name)?;
-                let parameters = self.parse_list(param_list, |s, pair| {
-                    Ok(Parameter {
-                        name: s.parse_ident(&pair.clone().into_inner().next().unwrap())?,
-                    }
-                    .into_node(&pair))
-                })?;
-                let body = self.parse_block(body)?;
-                Ok(Statement::MethodDefinition(
-                    MethodDefinition {
-                        name,
-                        body,
-                        parameters,
-                    }
-                    .into_node(&pair),
+                let body = self.parse_list(body, Self::parse_statement)?;
+                Ok(
+                    Statement::ClassDefinition(ClassDefinition { name, body }.into_node(&pair))
+                        .into_node(&pair),
                 )
-                .into_node(&pair))
             }
+            Rule::method_def => Ok(Statement::MethodDefinition(
+                self.parse_method_def(pair.clone())?,
+            )
+            .into_node(&pair)),
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
             }
             rule => unreachable!("{rule:?}"),
         }
+    }
+
+    fn parse_method_def(&mut self, pair: Pair<Rule>) -> Result<Node<MethodDefinition>> {
+        let [name, param_list, body] = pair.clone().into_inner().next_chunk().unwrap();
+        let name = self.parse_ident(&name)?;
+        let parameters = self.parse_list(param_list, |s, pair| {
+            Ok(Parameter {
+                name: s.parse_ident(&pair.clone().into_inner().next().unwrap())?,
+            }
+            .into_node(&pair))
+        })?;
+        let body = self.parse_block(body)?;
+        Ok(MethodDefinition {
+            name,
+            body,
+            parameters,
+        }
+        .into_node(&pair))
     }
 
     fn parse_expression(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {

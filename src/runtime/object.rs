@@ -55,7 +55,7 @@ impl Object {
     pub fn __name__(&self) -> Option<RcString> {
         Some(
             self.properties
-                .get(builtin::property::name)?
+                .get(builtin::property::__name__)?
                 .borrow()
                 .string()?
                 .clone(),
@@ -101,10 +101,6 @@ impl Object {
 
     pub fn set_property(&mut self, name: RcString, value: ObjectRef) {
         self.properties.insert(name, value);
-    }
-
-    pub fn class(&self) -> ObjectRef {
-        self.class.clone().unwrap()
     }
 
     pub fn define_method(

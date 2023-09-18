@@ -3,7 +3,8 @@ use crate::runtime::Error::{ArityMismatch, NoSuchMethod, NotCallable, UndefinedP
 use crate::runtime::Runtime;
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, Block, Call, Expression, LValue, Literal, Node, Program, RcString, Statement,
+    Access, Block, Call, Expression, LValue, Literal, MethodDefinition, Node, Program, RcString,
+    Statement,
 };
 
 impl Runtime {
@@ -20,17 +21,7 @@ impl Runtime {
                 self.eval(expression)?;
             }
             Statement::MethodDefinition(method_def) => {
-                let class = self.class();
-                let method_name = method_def.name.name.clone();
-                let params = method_def
-                    .parameters
-                    .iter()
-                    .map(|param| Param::Positional(param.name.name.clone()))
-                    .collect();
-                let body = MethodBody::User(method_def.v.body);
-                class
-                    .borrow_mut()
-                    .define_method(method_name, params, body)?;
+                self.exec_method_def(self.current_class(), method_def)?;
             }
             Statement::Assignment(assignment) => {
                 let LValue::Variable(var) = assignment.v.target.v.clone() else {
@@ -39,8 +30,40 @@ impl Runtime {
                 let value = self.eval(assignment.v.value)?;
                 self.assign(var.ident.name.clone(), value);
             }
+            Statement::ClassDefinition(class_def) => {
+                let class = self.create_class(class_def.v.name.v.name);
+                self.stack.push(StackFrame {
+                    class: Some(class),
+                    ..StackFrame::default()
+                });
+                for statement in class_def.v.body {
+                    if let Err(error) = self.exec(statement) {
+                        self.stack.pop();
+                        return Err(error);
+                    };
+                }
+                self.stack.pop();
+            }
             node => unimplemented!("{node:?}"),
         };
+        Ok(())
+    }
+
+    fn exec_method_def(
+        &mut self,
+        class: ObjectRef,
+        method_def: Node<MethodDefinition>,
+    ) -> Result<()> {
+        let method_name = method_def.name.name.clone();
+        let params = method_def
+            .parameters
+            .iter()
+            .map(|param| Param::Positional(param.name.name.clone()))
+            .collect();
+        let body = MethodBody::User(method_def.v.body);
+        class
+            .borrow_mut()
+            .define_method(method_name, params, body)?;
         Ok(())
     }
 
@@ -49,7 +72,7 @@ impl Runtime {
             Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
             Expression::Call(call) => {
                 let (method_name, arguments) = self.destructure_call(call)?;
-                self.perform_call(self.receiver(), method_name, arguments)
+                self.perform_call(self.current_receiver(), method_name, arguments)
             }
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
@@ -98,11 +121,22 @@ impl Runtime {
         method_name: RcString,
         arguments: Vec<ObjectRef>,
     ) -> Result<ObjectRef> {
-        let class = receiver.borrow().class();
-        let class_borrowed = class.borrow();
-        let Some(method) = class_borrowed.methods.get(&method_name) else {
+        if let Ok(object) = self.resolve(&method_name) && self.is_class(&object) {
+            let new_instance = self.create_object(object);
+            // TODO: arguments
+            return Ok(new_instance);
+        }
+        let class = receiver.borrow().__class__();
+        let class_ref = class.borrow();
+        let main = self.builtins.Main.clone();
+        let main_ref = main.borrow();
+        let method = if let Some(method) = class_ref.methods.get(&method_name) {
+            method
+        } else if let Some(method) = main_ref.methods.get(&method_name) {
+            method
+        } else {
             return Err(NoSuchMethod {
-                class_name: class.borrow().__name__().unwrap_or("".into()),
+                class_name: class_ref.__name__().unwrap_or("".into()),
                 method_name: method_name.clone(),
             });
         };
@@ -112,7 +146,7 @@ impl Runtime {
                     return Err(ArityMismatch {
                         expected: method.params.len(),
                         actual: arguments.len(),
-                        class_name: class.borrow().__name__().unwrap_or("".into()),
+                        class_name: class_ref.__name__().unwrap_or("".into()),
                         method_name: method_name.clone(),
                     });
                 }
@@ -141,6 +175,10 @@ impl Runtime {
                 function(self, receiver.clone(), method_name.clone(), arguments)
             }
         }
+    }
+
+    fn is_class(&self, object: &ObjectRef) -> bool {
+        object.borrow().__class__() == self.builtins.Class
     }
 
     fn eval_block(&mut self, block: Node<Block>) -> Result<ObjectRef> {

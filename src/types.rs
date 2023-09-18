@@ -111,8 +111,8 @@ define_node_types! {
     }
     ClassDefinition {
         name: Node<Ident>,
-        fields: Vec<RcString>,
-        methods: Vec<Node<MethodDefinition>>,
+        // fields: Vec<RcString>,
+        body: Vec<Node<Statement>>,
     }
     Parameter {
         name: Node<Ident>,
@@ -135,6 +135,7 @@ define_collector_enums! {
         Assignment,
         Expression,
         MethodDefinition,
+        ClassDefinition,
     }
     Expression {
         Access,
