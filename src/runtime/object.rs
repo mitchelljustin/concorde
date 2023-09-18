@@ -36,7 +36,7 @@ pub struct Method {
 }
 
 pub struct Object {
-    class: Option<ObjectRef>,
+    pub(crate) class: Option<ObjectRef>,
     weak_self: WeakObjectRef,
     properties: HashMap<RcString, ObjectRef>,
     methods: HashMap<RcString, Method>,

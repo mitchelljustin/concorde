@@ -21,7 +21,7 @@ pub mod builtin {
         pub const __name__: &str = "__name__";
         pub const __class__: &str = "__class__";
     }
-    
+
     pub mod method {
         pub const init: &str = "init";
     }
@@ -151,7 +151,7 @@ impl Runtime {
         let Class = self.builtins.Class.clone();
         Class.borrow_mut().class = Some(Class.clone());
         // now we can create classes
-        self.all_objects.push(Class.borrow().weak_self.clone());
+        self.all_objects.push(Class.borrow().weak_self());
         let name_Class: RcString = builtin::class::Class.into();
         self.assign_global(name_Class.clone(), Class.clone());
 
@@ -175,9 +175,15 @@ impl Runtime {
         // create booleans
         self.builtins.Bool = self.create_class(builtin::class::Bool.into());
         self.builtins.bool_true = self.create_object(self.builtins.Bool.clone());
-        self.builtins.bool_true.borrow_mut().primitive = Some(Primitive::Boolean(true));
+        self.builtins
+            .bool_true
+            .borrow_mut()
+            .set_primitive(Primitive::Boolean(true));
         self.builtins.bool_false = self.create_object(self.builtins.Bool.clone());
-        self.builtins.bool_false.borrow_mut().primitive = Some(Primitive::Boolean(false));
+        self.builtins
+            .bool_false
+            .borrow_mut()
+            .set_primitive(Primitive::Boolean(false));
 
         // create number
         self.builtins.Number = self.create_class(builtin::class::Number.into());
