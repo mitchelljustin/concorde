@@ -1,8 +1,8 @@
 class Some
-    def me(input)
-        print(input)
+    def greet(input)
+        print(self.name, input)
     end
 end
 some = Some()
-some.me("swag")
-
+some.name = "Mitch"
+some.greet("swag")

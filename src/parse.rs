@@ -4,6 +4,7 @@ use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 
+use crate::parse::Error::IllegalLValue;
 use crate::types::{
     Access, AnyNodeVariant, Assignment, Block, Boolean, Call, ClassDefinition, Expression, Ident,
     LValue, Literal, MethodDefinition, Nil, Node, NodeVariant, Number, Parameter, Program,
@@ -16,6 +17,8 @@ pub enum Error {
     Pest(#[from] pest::error::Error<Rule>),
     #[error("parse float error: {0}")]
     ParseFloat(#[from] ParseFloatError),
+    #[error("illegal lvalue for assignment: {lvalue}")]
+    IllegalLValue { lvalue: String },
 }
 
 type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
@@ -107,23 +110,7 @@ impl SourceParser {
             Rule::expr | Rule::primary | Rule::grouping => {
                 self.parse_expression(pair.into_inner().next().unwrap())
             }
-            Rule::access => {
-                let mut inner = pair.clone().into_inner();
-                let target = inner.next().unwrap();
-                let mut target = self.parse_expression(target)?;
-                while let Some(member) = inner.next() {
-                    let member = self.parse_expression(member)?;
-                    target = Expression::Access(
-                        Access {
-                            target: Box::new(target),
-                            member: Box::new(member),
-                        }
-                        .into_node(&pair),
-                    )
-                    .into_node(&pair);
-                }
-                Ok(target)
-            }
+            Rule::access => self.parse_access(pair),
             Rule::call => {
                 let mut inner = pair.clone().into_inner();
                 let target = inner.next().unwrap();
@@ -143,6 +130,24 @@ impl SourceParser {
             }
             rule => unreachable!("{rule:?}"),
         }
+    }
+
+    fn parse_access(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        let mut inner = pair.clone().into_inner();
+        let target = inner.next().unwrap();
+        let mut target = self.parse_expression(target)?;
+        while let Some(member) = inner.next() {
+            let member = self.parse_expression(member)?;
+            target = Expression::Access(
+                Access {
+                    target: Box::new(target),
+                    member: Box::new(member),
+                }
+                .into_node(&pair),
+            )
+            .into_node(&pair);
+        }
+        Ok(target)
     }
 
     fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Literal>> {
@@ -173,8 +178,19 @@ impl SourceParser {
 
     fn parse_lvalue(&mut self, pair: Pair<Rule>) -> Result<Node<LValue>> {
         match pair.as_rule() {
-            Rule::lvalue | Rule::variable => self.parse_lvalue(pair.into_inner().next().unwrap()),
-            Rule::ident => Ok(LValue::Variable(self.parse_variable(&pair)?).into_node(&pair)),
+            Rule::lvalue => self.parse_lvalue(pair.into_inner().next().unwrap()),
+            Rule::access => {
+                let lvalue = self.parse_access(pair.clone())?;
+                match lvalue.v {
+                    Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
+                    Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
+                    _ => {
+                        return Err(IllegalLValue {
+                            lvalue: lvalue.meta.source,
+                        })
+                    }
+                }
+            }
             rule => unreachable!("{rule:?}"),
         }
     }

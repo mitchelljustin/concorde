@@ -1,5 +1,7 @@
 use crate::runtime::object::{MethodBody, ObjectRef, Param};
-use crate::runtime::Error::{ArityMismatch, NoSuchMethod, NotCallable, UndefinedProperty};
+use crate::runtime::Error::{
+    ArityMismatch, IllegalAssignmentTarget, NoSuchMethod, NotCallable, UndefinedProperty,
+};
 use crate::runtime::Runtime;
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
@@ -24,11 +26,24 @@ impl Runtime {
                 self.exec_method_def(self.current_class(), method_def)?;
             }
             Statement::Assignment(assignment) => {
-                let LValue::Variable(var) = assignment.v.target.v.clone() else {
-                    unimplemented!();
-                };
-                let value = self.eval(assignment.v.value)?;
-                self.assign(var.ident.name.clone(), value);
+                let value = self.eval(assignment.v.value);
+                match assignment.v.target.v {
+                    LValue::Variable(var) => {
+                        self.assign(var.ident.name.clone(), value?);
+                    }
+                    LValue::Access(access) => {
+                        let target = self.eval(*access.target.clone())?;
+                        let Expression::Variable(member) = access.v.member.v else {
+                            return Err(IllegalAssignmentTarget {
+                                target: access.target.meta.source.clone().into(),
+                                member: access.member.meta.source.clone().into(),
+                            });
+                        };
+                        target
+                            .borrow_mut()
+                            .set_property(member.ident.name.clone(), value?);
+                    }
+                }
             }
             Statement::ClassDefinition(class_def) => {
                 let class = self.create_class(class_def.v.name.v.name);
@@ -36,13 +51,15 @@ impl Runtime {
                     class: Some(class),
                     ..StackFrame::default()
                 });
+                let mut result = Ok(());
                 for statement in class_def.v.body {
                     if let Err(error) = self.exec(statement) {
-                        self.stack.pop();
-                        return Err(error);
+                        result = Err(error);
+                        break;
                     };
                 }
                 self.stack.pop();
+                return result;
             }
             node => unimplemented!("{node:?}"),
         };

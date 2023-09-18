@@ -73,7 +73,7 @@ grouping = {
 }
 
 lvalue = {
-    variable | access
+    access
 }
 
 variable = {

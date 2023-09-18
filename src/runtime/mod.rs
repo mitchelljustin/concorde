@@ -35,6 +35,8 @@ pub enum Error {
     UndefinedProperty { target: RcString, member: RcString },
     #[error("expression '{expr}' is not callable")]
     NotCallable { expr: RcString },
+    #[error("illegal assignment target: '{target}.{member}'")]
+    IllegalAssignmentTarget { target: RcString, member: RcString },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
