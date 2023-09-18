@@ -83,7 +83,7 @@ impl SourceParser {
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
             }
-            rule => unreachable!("{rule:?}"),
+            rule => unreachable!("{}", rule),
         }
     }
 
@@ -120,7 +120,7 @@ impl SourceParser {
             Rule::op_not => Operator::LogicalNot,
             Rule::op_or => Operator::LogicalOr,
             Rule::op_and => Operator::LogicalAnd,
-            rule => unreachable!("{rule:?}"),
+            rule => unreachable!("{}", rule),
         }
     }
 
@@ -195,7 +195,7 @@ impl SourceParser {
                 )
                 .into_node(&pair))
             }
-            rule => unreachable!("{rule:?}"),
+            rule => unreachable!("{}", rule),
         }
     }
 
@@ -239,7 +239,7 @@ impl SourceParser {
                 .into_node(&pair),
             )
             .into_node(&pair)),
-            rule => unreachable!("{rule:?}"),
+            rule => unreachable!("{}", rule),
         }
     }
 
@@ -258,7 +258,7 @@ impl SourceParser {
                     }
                 }
             }
-            rule => unreachable!("{rule:?}"),
+            rule => unreachable!("{}", rule),
         }
     }
 

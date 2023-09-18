@@ -111,7 +111,6 @@ impl Runtime {
                 let method_name = builtin::op::method_for_binary_op(&binary.v.op);
                 self.perform_call(lhs, method_name.into(), vec![rhs])
             }
-            node => unimplemented!("{node:?}"),
         }
     }
 

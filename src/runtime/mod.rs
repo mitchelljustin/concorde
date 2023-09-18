@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::ops::ControlFlow;
 
 use crate::runtime::bootstrap::{builtin, Builtins};
