@@ -76,7 +76,7 @@ impl Runtime {
         runtime
     }
 
-    fn find_closest<T>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<&T> {
+    fn find_closest_in_stack<T>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<&T> {
         for frame in self.stack.iter().rev() {
             if let Some(found) = finder(&frame) {
                 return Some(found);
@@ -86,13 +86,13 @@ impl Runtime {
     }
 
     fn current_class(&self) -> ObjectRef {
-        self.find_closest(|frame| frame.class.as_ref())
+        self.find_closest_in_stack(|frame| frame.class.as_ref())
             .cloned()
             .expect("no class")
     }
 
     fn current_receiver(&self) -> ObjectRef {
-        self.find_closest(|frame| frame.receiver.as_ref())
+        self.find_closest_in_stack(|frame| frame.receiver.as_ref())
             .cloned()
             .expect("no receiver")
     }
@@ -162,14 +162,15 @@ impl Runtime {
         if name == builtin::SELF {
             return Ok(self.current_receiver());
         }
-        self.find_closest(|frame| frame.variables.get(name))
+        self.find_closest_in_stack(|frame| frame.variables.get(name))
             .cloned()
             .ok_or(NoSuchVariable { name: name.into() })
     }
 
     pub fn assign_variable(&mut self, name: RcString, object: ObjectRef) {
         for frame in self.stack.iter_mut().rev() {
-            if let Ok(_) = frame.variables.try_insert(name.clone(), object.clone()) {
+            if frame.variables.contains_key(&name) {
+                frame.variables.insert(name.clone(), object.clone());
                 return;
             }
         }

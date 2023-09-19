@@ -20,7 +20,10 @@ stmt = {
     assignment |
     method_def |
     class_def |
+    loop_break |
+    loop_next |
     for_in |
+    while_loop |
     expr
 }
 
@@ -29,6 +32,12 @@ for_in = {
         stmts ~
     "end"
 }
+
+while_loop = {
+    "while" ~ expr ~ NEWLINE ~
+        stmts ~
+    "end"
+} 
 
 method_def = {
     "def" ~ ident ~ param_list ~ NEWLINE ~
@@ -41,6 +50,9 @@ class_def = {
         stmts ~
     "end"
 }
+
+loop_break = { "break" }
+loop_next = { "next" }
 
 param_list = {
     ("(" ~ ")") |
@@ -198,7 +210,9 @@ KEYWORD = @{
     "in" |
     "and" |
     "or" |
-    "not"
+    "not" |
+    "break" |
+    "next"
 }
 
 ident = @{

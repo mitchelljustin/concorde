@@ -6,10 +6,10 @@ use pest_derive::Parser;
 
 use crate::parse::Error::{IllegalLValue, RuleMismatch};
 use crate::types::{
-    Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
-    Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil, Node,
-    NodeMeta, NodeVariant, Number, Operator, Parameter, Program, Statement,
-    String as StringVariant, TopError, Unary, Variable,
+    Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
+    ClassDefinition, Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition,
+    Next, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Program, Statement,
+    String as StringVariant, TopError, Unary, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -98,6 +98,17 @@ impl SourceParser {
                 )
                 .into_node(&pair))
             }
+            Rule::while_loop => {
+                let [condition, body] = pair.clone().into_inner().next_chunk().unwrap();
+                let condition = self.parse_expression(condition)?;
+                let body = self.parse_block(body)?;
+                Ok(
+                    Statement::WhileLoop(WhileLoop { condition, body }.into_node(&pair))
+                        .into_node(&pair),
+                )
+            }
+            Rule::loop_break => Ok(Statement::Break(Break {}.into_node(&pair)).into_node(&pair)),
+            Rule::loop_next => Ok(Statement::Next(Next {}.into_node(&pair)).into_node(&pair)),
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
             }

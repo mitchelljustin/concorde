@@ -109,7 +109,7 @@ define_node_types! {
         body: Node<Block>,
     }
     Break {}
-    Continue {}
+    Next {}
     Nil {}
     WhileLoop {
         condition: Node<Expression>,
@@ -166,8 +166,7 @@ define_collector_enums! {
         ForIn,
         WhileLoop,
         Break,
-        Continue,
-        Block,
+        Next,
         Assignment,
         Expression,
         MethodDefinition,

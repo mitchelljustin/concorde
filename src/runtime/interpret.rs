@@ -1,9 +1,11 @@
+use std::ops::ControlFlow;
+
 use crate::runtime::bootstrap::builtin;
 use crate::runtime::object::{MethodBody, ObjectRef, Param};
 use crate::runtime::Error::{
     ArityMismatch, IllegalAssignmentTarget, NoSuchMethod, NotCallable, UndefinedProperty,
 };
-use crate::runtime::Runtime;
+use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
     Access, Block, Call, Expression, LValue, Literal, MethodDefinition, Node, Program, RcString,
@@ -86,7 +88,27 @@ impl Runtime {
                 self.stack.pop();
                 return result;
             }
-            node => unimplemented!("{node:?}"),
+            Statement::WhileLoop(while_loop) => loop {
+                let condition = self.eval(while_loop.v.condition.clone())?;
+                if self.is_falsy(condition) {
+                    break;
+                }
+                let result = self.eval_block(while_loop.v.body.clone());
+                match result {
+                    Err(Error::ControlFlow(ControlFlow::Break(()))) => {
+                        break;
+                    }
+                    Err(Error::ControlFlow(ControlFlow::Continue(()))) => {
+                        continue;
+                    }
+                    Err(error) => {
+                        return Err(error);
+                    }
+                    Ok(_) => {}
+                }
+            },
+            Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
+            Statement::Next(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
         };
         Ok(())
     }
@@ -121,7 +143,7 @@ impl Runtime {
             Expression::Access(access) => self.eval_access(access),
             Expression::IfElse(if_else) => {
                 let condition = self.eval(*if_else.v.condition)?;
-                if condition == self.builtins.bool_false || condition == self.builtins.nil {
+                if self.is_falsy(condition) {
                     return if let Some(else_body) = if_else.v.else_body {
                         self.eval_block(else_body)
                     } else {
@@ -147,6 +169,10 @@ impl Runtime {
                 self.perform_call(rhs, method_name, None)
             }
         }
+    }
+
+    fn is_falsy(&self, condition: ObjectRef) -> bool {
+        condition == self.builtins.bool_false || condition == self.builtins.nil
     }
 
     fn eval_call_parts(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
