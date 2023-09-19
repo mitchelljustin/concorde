@@ -7,9 +7,9 @@ use pest_derive::Parser;
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
-    Expression, ForIn, Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta,
-    NodeVariant, Number, Operator, Parameter, Program, Statement, String as StringVariant,
-    TopError, Variable,
+    Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil, Node,
+    NodeMeta, NodeVariant, Number, Operator, Parameter, Program, Statement,
+    String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -143,7 +143,7 @@ impl SourceParser {
     fn parse_left_assoc(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
         let mut inner = pair.clone().into_inner();
         let mut lhs = self.parse_expression(inner.next().unwrap())?;
-        while let Ok([op, rhs]) = inner.next_chunk() {
+        for [op, rhs] in inner.array_chunks() {
             let rhs = self.parse_expression(rhs)?;
             let op = self.parse_operator(&op).into_node(&op);
             lhs = Expression::Binary(
@@ -174,18 +174,9 @@ impl SourceParser {
                 // TODO
                 self.parse_expression(pair.into_inner().next().unwrap())
             }
+            Rule::index => self.parse_index(pair),
             Rule::access => self.parse_access(pair),
-            Rule::call => {
-                let mut inner = pair.clone().into_inner();
-                let target = self.parse_expression(inner.next().unwrap())?;
-                let Some(arg_list) = inner.next() else {
-                    return Ok(target);
-                };
-                let expr_list = arg_list.into_inner().next().unwrap();
-                let arguments = self.parse_list(expr_list, Self::parse_expression)?;
-                let target = Box::new(target);
-                Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
-            }
+            Rule::call => self.parse_call(&pair),
             Rule::literal => {
                 let literal = self.parse_literal(pair.clone())?;
                 Ok(Expression::Literal(literal).into_node(&pair))
@@ -216,11 +207,42 @@ impl SourceParser {
         }
     }
 
+    fn parse_call(&mut self, pair: &Pair<Rule>) -> Result<Node<Expression>> {
+        let mut inner = pair.clone().into_inner();
+        let target = self.parse_expression(inner.next().unwrap())?;
+        let Some(arg_list) = inner.next() else {
+            return Ok(target);
+        };
+        let arguments = if let Some(expr_list) = arg_list.into_inner().next() {
+            self.parse_list(expr_list, Self::parse_expression)?
+        } else {
+            Vec::new()
+        };
+        let target = Box::new(target);
+        Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
+    }
+
+    fn parse_index(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        let mut inner = pair.clone().into_inner();
+        let mut target = self.parse_expression(inner.next().unwrap())?;
+        for index in inner {
+            let index = self.parse_expression(index)?;
+            target = Expression::Index(
+                Index {
+                    target: Box::new(target),
+                    index: Box::new(index),
+                }
+                .into_node(&pair),
+            )
+            .into_node(&pair);
+        }
+        Ok(target)
+    }
+
     fn parse_access(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
         let mut inner = pair.clone().into_inner();
-        let target = inner.next().unwrap();
-        let mut target = self.parse_expression(target)?;
-        while let Some(member) = inner.next() {
+        let mut target = self.parse_expression(inner.next().unwrap())?;
+        for member in inner {
             let member = self.parse_expression(member)?;
             target = Expression::Access(
                 Access {
@@ -268,9 +290,10 @@ impl SourceParser {
     fn parse_lvalue(&mut self, pair: Pair<Rule>) -> Result<Node<LValue>> {
         match pair.as_rule() {
             Rule::lvalue => self.parse_lvalue(pair.into_inner().next().unwrap()),
-            Rule::access => {
-                let lvalue = self.parse_access(pair.clone())?;
+            Rule::index => {
+                let lvalue = self.parse_index(pair.clone())?;
                 match lvalue.v {
+                    Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
                     Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
                     Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
                     _ => {

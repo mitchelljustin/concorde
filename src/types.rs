@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
-use std::ops::Deref;
 use std::rc::Rc;
 
 use pest::iterators::Pair;
@@ -129,6 +128,10 @@ define_node_types! {
         target: Node<LValue>,
         value: Node<Expression>,
     }
+    Index {
+        target: Box<Node<Expression>>,
+        index: Box<Node<Expression>>,
+    }
     Call {
         target: Box<Node<Expression>>,
         arguments: Vec<Node<Expression>>,
@@ -167,6 +170,7 @@ define_collector_enums! {
         ClassDefinition,
     }
     Expression {
+        Index,
         Access,
         Call,
         Literal,
@@ -184,6 +188,7 @@ define_collector_enums! {
     LValue {
         Variable,
         Access,
+        Index,
     }
 }
 

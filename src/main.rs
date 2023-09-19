@@ -4,6 +4,7 @@
 #![feature(iter_next_chunk)]
 #![feature(let_chains)]
 #![feature(map_try_insert)]
+#![feature(iter_array_chunks)]
 
 use crate::parse::SourceParser;
 use crate::runtime::Runtime;

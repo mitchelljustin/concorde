@@ -41,6 +41,12 @@ pub enum Error {
     NotCallable { expr: NodeMeta },
     #[error("illegal assignment target: '{target}.{member}'")]
     IllegalAssignmentTarget { target: RcString, member: RcString },
+    #[error("index error: {error}")]
+    IndexError { error: &'static str },
+    #[error("illegal constructor call: {class}")]
+    IllegalConstructorCall { class: RcString },
+    #[error("type error: expected {expected}, got {class}")]
+    TypeError { expected: RcString, class: RcString },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;

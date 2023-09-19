@@ -101,7 +101,11 @@ logical_not = {
 }
 
 unary_minus = {
-    op_minus* ~ access
+    op_minus* ~ index
+}
+
+index = {
+    access ~ ("[" ~ expr ~ "]")*
 }
 
 op_eq = { "==" }
@@ -158,7 +162,7 @@ grouping = {
 }
 
 lvalue = {
-    access
+    index
 }
 
 variable = {

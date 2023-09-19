@@ -1,7 +1,7 @@
-use std::ops::Add;
+use std::ops::{Add, Rem};
 
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
-use crate::runtime::Error::ArityMismatch;
+use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
 use crate::runtime::Runtime;
 use crate::types::RcString;
 
@@ -47,6 +47,8 @@ pub mod builtin {
         pub const __and__: &str = "__and__";
         pub const __neg__: &str = "__neg__";
         pub const __not__: &str = "__not__";
+        pub const __index__: &str = "__index__";
+        pub const __set_index__: &str = "__set_index__";
 
         pub fn method_for_binary_op(op: &Operator) -> &str {
             match op {
@@ -215,6 +217,11 @@ impl Runtime {
     fn bootstrap_stdlib(&mut self) {
         define_system_methods!(
             [class=self.builtins.Number, runtime=runtime, method_name=method_name, this=this]
+            fn init() {
+                this.borrow_mut().set_primitive(Primitive::Number(Default::default()));
+                this
+            }
+
             fn __eq__(other) {
                 let result = this.borrow().number().unwrap() == other.borrow().number().unwrap();
                 runtime.create_bool(result)
@@ -292,6 +299,11 @@ impl Runtime {
         );
         define_system_methods!(
             [class=self.builtins.String, runtime=runtime, method_name=method_name, this=this]
+            fn init() {
+                this.borrow_mut().set_primitive(Primitive::String("".into()));
+                this
+            }
+
             fn trim() {
                 let result = this.borrow().string().unwrap().trim().into();
                 runtime.create_string(result)
@@ -308,10 +320,30 @@ impl Runtime {
             }
 
             fn __add__(other) {
+                if other.borrow().__class__() != runtime.builtins.String {
+                    return Err(TypeError {
+                        expected: builtin::class::String.into(),
+                        class: other.borrow().__class__().borrow().__name__().unwrap(),
+                    });
+                }
                 let me = this.borrow().string().unwrap();
                 let other: RcString = other.borrow().string().unwrap();
                 let result = String::from(me.as_ref()).add(other.as_ref()).into();
                 runtime.create_string(result)
+            }
+
+            fn push(other) {
+                if other.borrow().__class__() != runtime.builtins.String {
+                    return Err(TypeError {
+                        expected: builtin::class::String.into(),
+                        class: other.borrow().__class__().borrow().__name__().unwrap(),
+                    });
+                }
+                let me = this.borrow().string().unwrap();
+                let other: RcString = other.borrow().string().unwrap();
+                let result = String::from(me.as_ref()).add(other.as_ref()).into();
+                this.borrow_mut().set_primitive(Primitive::String(result));
+                runtime.nil()
             }
 
             fn to_s() {
@@ -330,12 +362,24 @@ impl Runtime {
         );
         define_system_methods!(
             [class=self.builtins.NilClass, runtime=runtime, method_name=method_name, this=this]
+            fn init() {
+                return Err(IllegalConstructorCall {
+                    class: this.borrow().__class__().borrow().__name__().unwrap(),
+                });
+            }
+
+
             fn to_s() {
                 runtime.create_string("nil".into())
             }
         );
         define_system_methods!(
             [class=self.builtins.Bool, runtime=runtime, method_name=method_name, this=this]
+            fn init() {
+                this.borrow_mut().set_primitive(Primitive::Boolean(Default::default()));
+                this
+            }
+
             fn to_s() {
                 runtime.create_string(this.borrow().bool().unwrap().to_string().into())
             }
@@ -343,8 +387,8 @@ impl Runtime {
         define_system_methods!(
             [class=self.builtins.Array, runtime=runtime, method_name=method_name, this=this]
             fn to_s() {
-                let objects = this.borrow().array().unwrap();
-                let strings = objects
+                let elements = this.borrow().array().unwrap();
+                let strings = elements
                     .into_iter()
                     .map(|object|
                         runtime
@@ -357,6 +401,50 @@ impl Runtime {
                     .collect::<Result<Vec<String>, _>>()?;
                 let inner = strings.join(", ");
                 runtime.create_string(format!("[{inner}]").into())
+            }
+
+            fn __index__(index) {
+                if index.borrow().__class__() != runtime.builtins.Number {
+                    return Err(TypeError {
+                        class: index.borrow().__class__().borrow().__name__().unwrap(),
+                        expected: builtin::class::Number.into(),
+                    });
+                }
+                let index = index.borrow().number().unwrap() as isize;
+                let elements = this.borrow().array().unwrap();
+                let index = if index < 0 {
+                    index % elements.len() as isize
+                } else {
+                    index
+                } as usize;
+                if index >= elements.len() {
+                    return Ok(runtime.nil());
+                }
+                elements[index].clone()
+            }
+
+            fn init() {
+                this.borrow_mut().set_primitive(Primitive::Array(Default::default()));
+                this
+            }
+
+            fn push(element) {
+                let mut this_ref = this.borrow_mut();
+                let Some(Primitive::Array(elements)) = &mut this_ref.primitive else {
+                    unreachable!();
+                };
+                elements.push(element);
+                runtime.nil()
+            }
+
+            fn pop() {
+                let mut this_ref = this.borrow_mut();
+                let Some(Primitive::Array(elements)) = &mut this_ref.primitive else {
+                    unreachable!();
+                };
+                elements.pop().ok_or(IndexError {
+                    error: "pop from empty list",
+                })?
             }
         );
         self.builtins

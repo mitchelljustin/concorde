@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
-use crate::runtime::{Result, Runtime};
 use crate::runtime::bootstrap::builtin;
 use crate::runtime::Error::DuplicateDefinition;
+use crate::runtime::{Result, Runtime};
 use crate::types::{Block, Node, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
@@ -53,7 +53,7 @@ pub struct Object {
     weak_self: WeakObjectRef,
     properties: HashMap<RcString, ObjectRef>,
     methods: HashMap<RcString, MethodRef>,
-    primitive: Option<Primitive>,
+    pub(super) primitive: Option<Primitive>,
 }
 
 impl PartialEq for Object {

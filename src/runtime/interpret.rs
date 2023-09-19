@@ -44,6 +44,12 @@ impl Runtime {
                             .borrow_mut()
                             .set_property(member.v.ident.v.name.clone(), value?);
                     }
+                    LValue::Index(index) => {
+                        let target = self.eval(*index.v.target)?;
+                        let index = self.eval(*index.v.index)?;
+                        let value = value?;
+                        self.perform_call(target, builtin::op::__set_index__, [index, value])?;
+                    }
                 }
             }
             Statement::ClassDefinition(class_def) => {
@@ -130,6 +136,11 @@ impl Runtime {
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&binary.v.op.v);
                 self.perform_call(lhs, method_name, [rhs])
+            }
+            Expression::Index(index) => {
+                let target = self.eval(*index.v.target)?;
+                let index = self.eval(*index.v.index)?;
+                self.perform_call(target, builtin::op::__index__, [index])
             }
         }
     }
