@@ -141,6 +141,11 @@ impl Runtime {
                 let index = self.eval(*index.v.index)?;
                 self.perform_call(target, builtin::op::__index__, [index])
             }
+            Expression::Unary(unary) => {
+                let rhs = self.eval(*unary.v.rhs)?;
+                let method_name = builtin::op::method_for_unary_op(&unary.v.op.v).unwrap();
+                self.perform_call(rhs, method_name, None)
+            }
         }
     }
 

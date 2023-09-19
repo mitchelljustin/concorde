@@ -120,6 +120,10 @@ define_node_types! {
         op: Node<Operator>,
         rhs: Box<Node<Expression>>,
     }
+    Unary {
+        op: Node<Operator>,
+        rhs: Box<Node<Expression>>,
+    }
     Access {
         target: Box<Node<Expression>>,
         member: Box<Node<Expression>>,
@@ -177,6 +181,7 @@ define_collector_enums! {
         Variable,
         IfElse,
         Binary,
+        Unary,
     }
     Literal {
         Array,

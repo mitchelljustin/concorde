@@ -67,6 +67,14 @@ pub mod builtin {
                 Operator::LogicalNot => __not__,
             }
         }
+
+        pub fn method_for_unary_op(op: &Operator) -> Option<&str> {
+            match op {
+                Operator::Minus => Some(__neg__),
+                Operator::LogicalNot => Some(__not__),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -272,6 +280,11 @@ impl Runtime {
                 runtime.create_number(result)
             }
 
+            fn __neg__() {
+                let result = - this.borrow().number().unwrap();
+                runtime.create_number(result)
+            }
+
             fn round() {
                 let result = this.borrow().number().unwrap().round();
                 runtime.create_number(result)
@@ -375,6 +388,14 @@ impl Runtime {
         );
         define_system_methods!(
             [class=self.builtins.Bool, runtime=runtime, method_name=method_name, this=this]
+            fn __not__() {
+                if this == runtime.builtins.bool_false {
+                    runtime.builtins.bool_true.clone()
+                } else {
+                    runtime.builtins.bool_false.clone()
+                }
+            }
+
             fn init() {
                 this.borrow_mut().set_primitive(Primitive::Boolean(Default::default()));
                 this
@@ -410,10 +431,13 @@ impl Runtime {
                         expected: builtin::class::Number.into(),
                     });
                 }
-                let index = index.borrow().number().unwrap() as isize;
                 let elements = this.borrow().array().unwrap();
+                if elements.len() == 0 {
+                    return Ok(runtime.nil());
+                }
+                let index = index.borrow().number().unwrap() as isize;
                 let index = if index < 0 {
-                    index % elements.len() as isize
+                    index.rem_euclid(elements.len() as isize)
                 } else {
                     index
                 } as usize;

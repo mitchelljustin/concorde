@@ -9,7 +9,7 @@ use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
     Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil, Node,
     NodeMeta, NodeVariant, Number, Operator, Parameter, Program, Statement,
-    String as StringVariant, TopError, Variable,
+    String as StringVariant, TopError, Unary, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -123,7 +123,7 @@ impl SourceParser {
         .into_node(&pair))
     }
 
-    fn parse_operator(&mut self, pair: &Pair<Rule>) -> Operator {
+    fn parse_operator(&mut self, pair: &Pair<Rule>) -> Node<Operator> {
         match pair.as_rule() {
             Rule::op_eq => Operator::EqualEqual,
             Rule::op_neq => Operator::NotEqual,
@@ -140,6 +140,7 @@ impl SourceParser {
             Rule::op_and => Operator::LogicalAnd,
             rule => unreachable!("{:?}", rule),
         }
+        .into_node(pair)
     }
 
     fn parse_left_assoc(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
@@ -147,7 +148,7 @@ impl SourceParser {
         let mut lhs = self.parse_expression(inner.next().unwrap())?;
         for [op, rhs] in inner.array_chunks() {
             let rhs = self.parse_expression(rhs)?;
-            let op = self.parse_operator(&op).into_node(&op);
+            let op = self.parse_operator(&op);
             lhs = Expression::Binary(
                 Binary {
                     lhs: Box::new(lhs),
@@ -173,8 +174,19 @@ impl SourceParser {
             | Rule::term
             | Rule::factor => self.parse_left_assoc(pair),
             Rule::logical_not | Rule::unary_minus => {
-                // TODO
-                self.parse_expression(pair.into_inner().next().unwrap())
+                let mut inner = pair.clone().into_inner().rev();
+                let mut expr = self.parse_expression(inner.next().unwrap())?;
+                for operator in inner {
+                    expr = Expression::Unary(
+                        Unary {
+                            rhs: Box::new(expr),
+                            op: self.parse_operator(&operator),
+                        }
+                        .into_node(&pair),
+                    )
+                    .into_node(&pair);
+                }
+                Ok(expr)
             }
             Rule::index => self.parse_index(pair),
             Rule::access => self.parse_access(pair),
