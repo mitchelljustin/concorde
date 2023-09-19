@@ -12,6 +12,24 @@ use crate::types::{
     Statement,
 };
 
+macro handle_loop_control_flow($result:ident) {
+    match $result {
+        Err(Error::ControlFlow(ControlFlow::Break(()))) => {
+            $result = Ok(());
+            break;
+        }
+        Err(Error::ControlFlow(ControlFlow::Continue(()))) => {
+            $result = Ok(());
+            continue;
+        }
+        Err(error) => {
+            $result = Err(error);
+            break;
+        }
+        Ok(()) => {}
+    }
+}
+
 impl Runtime {
     pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
         for statement in program.v.body.v.statements {
@@ -80,33 +98,25 @@ impl Runtime {
                 let mut result = Ok(());
                 for element in elements {
                     self.define_variable(binding_name.clone(), element);
-                    if let Err(err) = self.eval_block(for_in.v.body.clone()) {
-                        result = Err(err);
-                        break;
-                    }
+                    result = self.eval_block(for_in.v.body.clone()).map(|_| ());
+                    handle_loop_control_flow!(result);
                 }
                 self.stack.pop();
                 return result;
             }
-            Statement::WhileLoop(while_loop) => loop {
-                let condition = self.eval(while_loop.v.condition.clone())?;
-                if self.is_falsy(condition) {
-                    break;
-                }
-                let result = self.eval_block(while_loop.v.body.clone());
-                match result {
-                    Err(Error::ControlFlow(ControlFlow::Break(()))) => {
+            Statement::WhileLoop(while_loop) => {
+                self.stack.push(StackFrame::default());
+                let mut result = Ok(());
+                loop {
+                    let condition = self.eval(while_loop.v.condition.clone())?;
+                    if self.is_falsy(condition) {
                         break;
                     }
-                    Err(Error::ControlFlow(ControlFlow::Continue(()))) => {
-                        continue;
-                    }
-                    Err(error) => {
-                        return Err(error);
-                    }
-                    Ok(_) => {}
+                    result = self.eval_block(while_loop.v.body.clone()).map(|_| ());
+                    handle_loop_control_flow!(result);
                 }
-            },
+                return result;
+            }
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
             Statement::Next(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
         };
