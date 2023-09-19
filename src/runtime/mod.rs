@@ -70,13 +70,10 @@ impl Runtime {
         runtime
     }
 
-    fn find_closest(
-        &self,
-        finder: impl Fn(&StackFrame) -> Option<&ObjectRef>,
-    ) -> Option<ObjectRef> {
+    fn find_closest<T>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<&T> {
         for frame in self.stack.iter().rev() {
             if let Some(found) = finder(&frame) {
-                return Some(found.clone());
+                return Some(found);
             }
         }
         None
@@ -84,11 +81,13 @@ impl Runtime {
 
     fn current_class(&self) -> ObjectRef {
         self.find_closest(|frame| frame.class.as_ref())
+            .cloned()
             .expect("no class")
     }
 
     fn current_receiver(&self) -> ObjectRef {
         self.find_closest(|frame| frame.receiver.as_ref())
+            .cloned()
             .expect("no receiver")
     }
 
@@ -158,10 +157,20 @@ impl Runtime {
             return Ok(self.current_receiver());
         }
         self.find_closest(|frame| frame.variables.get(name))
+            .cloned()
             .ok_or(NoSuchVariable { name: name.into() })
     }
 
-    pub fn assign(&mut self, name: RcString, object: ObjectRef) {
+    pub fn assign_variable(&mut self, name: RcString, object: ObjectRef) {
+        for frame in self.stack.iter_mut().rev() {
+            if let Ok(_) = frame.variables.try_insert(name.clone(), object.clone()) {
+                return;
+            }
+        }
+        self.define_variable(name, object);
+    }
+
+    fn define_variable(&mut self, name: RcString, object: ObjectRef) {
         self.stack
             .last_mut()
             .expect("no scope")

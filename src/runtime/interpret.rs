@@ -30,7 +30,7 @@ impl Runtime {
                 let value = self.eval(assignment.v.value);
                 match assignment.v.target.v {
                     LValue::Variable(var) => {
-                        self.assign(var.ident.name.clone(), value?);
+                        self.assign_variable(var.ident.name.clone(), value?);
                     }
                     LValue::Access(access) => {
                         let target = self.eval(*access.target.clone())?;
@@ -58,6 +58,25 @@ impl Runtime {
                         result = Err(error);
                         break;
                     };
+                }
+                self.stack.pop();
+                return result;
+            }
+            Statement::ForIn(for_in) => {
+                let binding_name = for_in.v.binding.v.ident.v.name;
+                let iterator = self.eval(for_in.v.iterator)?;
+                self.stack.push(StackFrame::default());
+                if iterator.borrow().__class__() != self.builtins.Array {
+                    unimplemented!();
+                }
+                let elements = iterator.borrow().array().unwrap();
+                let mut result = Ok(());
+                for element in elements {
+                    self.define_variable(binding_name.clone(), element);
+                    if let Err(err) = self.eval_block(for_in.v.body.clone()) {
+                        result = Err(err);
+                        break;
+                    }
                 }
                 self.stack.pop();
                 return result;

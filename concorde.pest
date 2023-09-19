@@ -20,7 +20,14 @@ stmt = {
     assignment |
     method_def |
     class_def |
+    for_in |
     expr
+}
+
+for_in = {
+    "for" ~ variable ~ "in" ~ expr ~ NEWLINE ~
+        stmts ~
+    "end"
 }
 
 method_def = {
@@ -159,7 +166,7 @@ variable = {
 }
 
 arg_list = {
-    ("(" ~ ")") | 
+    ("(" ~ ")") |
     ("(" ~ expr_list ~ ")")
 }
 
@@ -175,7 +182,19 @@ bool = @{ "true" | "false" }
 nil = @{ "nil" }
 
 KEYWORD = @{
-    "class" | "true" | "false" | "nil" | "def" | "end" | "if" | "else"
+    "class" |
+    "true" |
+    "false" |
+    "nil" |
+    "def" |
+    "end" |
+    "if" |
+    "else" |
+    "for" |
+    "in" |
+    "and" |
+    "or" |
+    "not"
 }
 
 ident = @{
@@ -196,7 +215,7 @@ string = @{
 }
 
 array = {
-    ("[" ~ "]") | 
+    ("[" ~ "]") |
     ("[" ~ expr_list ~ "]")
 }
 

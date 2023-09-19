@@ -3,6 +3,7 @@
 #![feature(strict_provenance)]
 #![feature(iter_next_chunk)]
 #![feature(let_chains)]
+#![feature(map_try_insert)]
 
 use crate::parse::SourceParser;
 use crate::runtime::Runtime;

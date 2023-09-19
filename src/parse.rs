@@ -7,8 +7,9 @@ use pest_derive::Parser;
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
-    Expression, Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant,
-    Number, Operator, Parameter, Program, Statement, String as StringVariant, TopError, Variable,
+    Expression, ForIn, Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta,
+    NodeVariant, Number, Operator, Parameter, Program, Statement, String as StringVariant,
+    TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -80,6 +81,21 @@ impl SourceParser {
                 self.parse_method_def(pair.clone())?,
             )
             .into_node(&pair)),
+            Rule::for_in => {
+                let [binding, iterator, body] = pair.clone().into_inner().next_chunk().unwrap();
+                let binding = self.parse_variable(&binding)?;
+                let iterator = self.parse_expression(iterator)?;
+                let body = self.parse_block(body)?;
+                Ok(Statement::ForIn(
+                    ForIn {
+                        binding,
+                        iterator,
+                        body,
+                    }
+                    .into_node(&pair),
+                )
+                .into_node(&pair))
+            }
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
             }

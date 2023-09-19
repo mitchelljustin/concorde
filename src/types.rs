@@ -112,9 +112,9 @@ define_node_types! {
         then_body: Node<Block>,
         else_body: Option<Node<Block>>,
     }
-    ForLoop {
-        iterator: Node<Ident>,
-        target: Node<Expression>,
+    ForIn {
+        binding: Node<Variable>,
+        iterator: Node<Expression>,
         body: Node<Block>,
     }
     Break {}
@@ -164,7 +164,7 @@ define_node_types! {
 
 define_collector_enums! {
     Statement {
-        ForLoop,
+        ForIn,
         WhileLoop,
         Break,
         Continue,
