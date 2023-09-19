@@ -58,14 +58,6 @@ pub trait NodeVariant: Sized + Debug + Clone {
     }
 }
 
-impl<V: NodeVariant> Deref for Node<V> {
-    type Target = V;
-
-    fn deref(&self) -> &Self::Target {
-        &self.v
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum Operator {
     EqualEqual,

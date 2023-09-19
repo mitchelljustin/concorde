@@ -30,19 +30,19 @@ impl Runtime {
                 let value = self.eval(assignment.v.value);
                 match assignment.v.target.v {
                     LValue::Variable(var) => {
-                        self.assign_variable(var.ident.name.clone(), value?);
+                        self.assign_variable(var.v.ident.v.name.clone(), value?);
                     }
                     LValue::Access(access) => {
-                        let target = self.eval(*access.target.clone())?;
+                        let target = self.eval(*access.v.target.clone())?;
                         let Expression::Variable(member) = access.v.member.v else {
                             return Err(IllegalAssignmentTarget {
-                                target: access.target.meta.source.clone().into(),
-                                member: access.member.meta.source.clone().into(),
+                                target: access.v.target.meta.source.clone().into(),
+                                member: access.v.member.meta.source.clone().into(),
                             });
                         };
                         target
                             .borrow_mut()
-                            .set_property(member.ident.name.clone(), value?);
+                            .set_property(member.v.ident.v.name.clone(), value?);
                     }
                 }
             }
@@ -91,11 +91,12 @@ impl Runtime {
         class: ObjectRef,
         method_def: Node<MethodDefinition>,
     ) -> Result<()> {
-        let method_name = method_def.name.name.clone();
+        let method_name = method_def.v.name.v.name.clone();
         let params = method_def
+            .v
             .parameters
             .iter()
-            .map(|param| Param::Positional(param.name.name.clone()))
+            .map(|param| Param::Positional(param.v.name.v.name.clone()))
             .collect();
         let body = MethodBody::User(method_def.v.body);
         class
@@ -106,7 +107,7 @@ impl Runtime {
 
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
-            Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
+            Expression::Variable(var) => self.resolve(var.v.ident.v.name.as_ref()),
             Expression::Call(call) => {
                 let (method_name, arguments) = self.eval_call_parts(call)?;
                 self.perform_call(self.current_receiver(), &method_name, arguments)
@@ -127,7 +128,7 @@ impl Runtime {
             Expression::Binary(binary) => {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
-                let method_name = builtin::op::method_for_binary_op(&binary.v.op);
+                let method_name = builtin::op::method_for_binary_op(&binary.v.op.v);
                 self.perform_call(lhs, method_name, [rhs])
             }
         }
@@ -142,7 +143,7 @@ impl Runtime {
         let Expression::Variable(var) = target.v else {
             return Err(NotCallable { expr: target.meta });
         };
-        let method_name = var.ident.name.clone();
+        let method_name = var.v.ident.v.name.clone();
         Ok((method_name, arguments))
     }
 
@@ -151,7 +152,7 @@ impl Runtime {
         let target = self.eval(*target)?;
         match member.v {
             Expression::Variable(var) => {
-                let member = &var.ident.name;
+                let member = &var.v.ident.v.name;
                 let value = target.borrow().get_property(member);
                 return value.ok_or(UndefinedProperty {
                     target: target.borrow().__debug__(),
@@ -247,7 +248,7 @@ impl Runtime {
 
     fn eval_block(&mut self, block: Node<Block>) -> Result<ObjectRef> {
         let mut retval = self.nil();
-        let statement_count = block.statements.len();
+        let statement_count = block.v.statements.len();
         for (i, statement) in block.v.statements.into_iter().enumerate() {
             match statement.v {
                 Statement::Expression(expression) if i == statement_count - 1 => {
@@ -262,8 +263,8 @@ impl Runtime {
     fn eval_literal(&mut self, literal: Node<Literal>) -> Result<ObjectRef> {
         match literal.v {
             Literal::String(string) => Ok(self.create_string(string.v.value)),
-            Literal::Number(number) => Ok(self.create_number(number.value)),
-            Literal::Boolean(boolean) => Ok(self.create_bool(boolean.value)),
+            Literal::Number(number) => Ok(self.create_number(number.v.value)),
+            Literal::Boolean(boolean) => Ok(self.create_bool(boolean.v.value)),
             Literal::Array(array) => {
                 let elements = array
                     .v
