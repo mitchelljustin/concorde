@@ -33,11 +33,10 @@ impl Runtime {
                         self.assign_variable(var.v.ident.v.name.clone(), value?);
                     }
                     LValue::Access(access) => {
-                        let target = self.eval(*access.v.target.clone())?;
+                        let target = self.eval(*access.v.target)?;
                         let Expression::Variable(member) = access.v.member.v else {
                             return Err(IllegalAssignmentTarget {
-                                target: access.v.target.meta.source.clone().into(),
-                                member: access.v.member.meta.source.clone().into(),
+                                access: access.meta,
                             });
                         };
                         target
@@ -146,13 +145,16 @@ impl Runtime {
     }
 
     fn eval_call_parts(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
-        let Call { target, arguments } = call.v;
-        let arguments = arguments
+        let arguments = call
+            .v
+            .arguments
             .into_iter()
             .map(|argument| self.eval(argument))
             .collect::<Result<Vec<_>, _>>()?;
-        let Expression::Variable(var) = target.v else {
-            return Err(NotCallable { expr: target.meta });
+        let Expression::Variable(var) = call.v.target.v else {
+            return Err(NotCallable {
+                expr: call.v.target.meta,
+            });
         };
         let method_name = var.v.ident.v.name.clone();
         Ok((method_name, arguments))

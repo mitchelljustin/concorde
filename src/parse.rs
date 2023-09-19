@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::parse::Error::IllegalLValue;
+use crate::parse::Error::{IllegalLValue, RuleMismatch};
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
     Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil, Node,
@@ -20,6 +20,8 @@ pub enum Error {
     ParseFloat(#[from] ParseFloatError),
     #[error("illegal lvalue for assignment: {lvalue}")]
     IllegalLValue { lvalue: NodeMeta },
+    #[error("rule mismatch: expected '{expected:?}', got '{actual:?}'")]
+    RuleMismatch { expected: Rule, actual: Rule },
 }
 
 type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
@@ -208,57 +210,67 @@ impl SourceParser {
     }
 
     fn parse_call(&mut self, pair: &Pair<Rule>) -> Result<Node<Expression>> {
+        self.assert_rule(&pair, Rule::call)?;
         let mut inner = pair.clone().into_inner();
-        let target = self.parse_expression(inner.next().unwrap())?;
-        let Some(arg_list) = inner.next() else {
-            return Ok(target);
-        };
-        let arguments = if let Some(expr_list) = arg_list.into_inner().next() {
-            self.parse_list(expr_list, Self::parse_expression)?
-        } else {
-            Vec::new()
-        };
-        let target = Box::new(target);
-        Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
+        let mut expr = self.parse_expression(inner.next().unwrap())?;
+        for arg_list in inner {
+            let arguments = if let Some(expr_list) = arg_list.into_inner().next() {
+                self.parse_list(expr_list, Self::parse_expression)?
+            } else {
+                Vec::new()
+            };
+            expr = Expression::Call(
+                Call {
+                    target: Box::new(expr),
+                    arguments,
+                }
+                .into_node(&pair),
+            )
+            .into_node(&pair)
+        }
+        Ok(expr)
     }
 
     fn parse_index(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        self.assert_rule(&pair, Rule::index)?;
         let mut inner = pair.clone().into_inner();
-        let mut target = self.parse_expression(inner.next().unwrap())?;
+        let mut expr = self.parse_expression(inner.next().unwrap())?;
         for index in inner {
             let index = self.parse_expression(index)?;
-            target = Expression::Index(
+            expr = Expression::Index(
                 Index {
-                    target: Box::new(target),
+                    target: Box::new(expr),
                     index: Box::new(index),
                 }
                 .into_node(&pair),
             )
             .into_node(&pair);
         }
-        Ok(target)
+        Ok(expr)
     }
 
     fn parse_access(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        self.assert_rule(&pair, Rule::access)?;
         let mut inner = pair.clone().into_inner();
-        let mut target = self.parse_expression(inner.next().unwrap())?;
+        let mut expr = self.parse_expression(inner.next().unwrap())?;
         for member in inner {
             let member = self.parse_expression(member)?;
-            target = Expression::Access(
+            expr = Expression::Access(
                 Access {
-                    target: Box::new(target),
+                    target: Box::new(expr),
                     member: Box::new(member),
                 }
                 .into_node(&pair),
             )
             .into_node(&pair);
         }
-        Ok(target)
+        Ok(expr)
     }
 
     fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Literal>> {
+        self.assert_rule(&pair, Rule::literal)?;
+        let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
-            Rule::literal => self.parse_literal(pair.into_inner().next().unwrap()),
             Rule::nil => Ok(Literal::Nil(Nil {}.into_node(&pair)).into_node(&pair)),
             Rule::bool => Ok(Literal::Boolean(
                 Boolean {
@@ -288,26 +300,24 @@ impl SourceParser {
     }
 
     fn parse_lvalue(&mut self, pair: Pair<Rule>) -> Result<Node<LValue>> {
-        match pair.as_rule() {
-            Rule::lvalue => self.parse_lvalue(pair.into_inner().next().unwrap()),
-            Rule::index => {
-                let lvalue = self.parse_index(pair.clone())?;
-                match lvalue.v {
-                    Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
-                    Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
-                    Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
-                    _ => {
-                        return Err(IllegalLValue {
-                            lvalue: lvalue.meta,
-                        })
-                    }
-                }
+        self.assert_rule(&pair, Rule::lvalue)?;
+        let pair = pair.into_inner().next().unwrap();
+        self.assert_rule(&pair, Rule::index)?;
+        let lvalue = self.parse_index(pair.clone())?;
+        match lvalue.v {
+            Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
+            Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
+            Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
+            _ => {
+                return Err(IllegalLValue {
+                    lvalue: lvalue.meta,
+                })
             }
-            rule => unreachable!("{:?}", rule),
         }
     }
 
     fn parse_variable(&mut self, pair: &Pair<Rule>) -> Result<Node<Variable>> {
+        self.assert_rule(pair, Rule::variable)?;
         Ok(Variable {
             ident: self.parse_ident(pair)?,
         }
@@ -319,5 +329,13 @@ impl SourceParser {
             name: pair.as_str().into(),
         }
         .into_node(&pair))
+    }
+
+    fn assert_rule(&self, pair: &Pair<Rule>, expected: Rule) -> Result<()> {
+        let actual = pair.as_rule();
+        if actual != expected {
+            return Err(RuleMismatch { expected, actual });
+        }
+        Ok(())
     }
 }

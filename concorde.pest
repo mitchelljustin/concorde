@@ -148,7 +148,7 @@ access = {
 }
 
 call = {
-    primary ~ arg_list?
+    primary ~ arg_list*
 }
 
 primary = {

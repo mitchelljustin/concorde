@@ -39,8 +39,8 @@ pub enum Error {
     },
     #[error("expression is not callable: {expr}")]
     NotCallable { expr: NodeMeta },
-    #[error("illegal assignment target: '{target}.{member}'")]
-    IllegalAssignmentTarget { target: RcString, member: RcString },
+    #[error("illegal assignment target: {access}")]
+    IllegalAssignmentTarget { access: NodeMeta },
     #[error("index error: {error}")]
     IndexError { error: &'static str },
     #[error("illegal constructor call: {class}")]
