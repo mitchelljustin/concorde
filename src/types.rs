@@ -100,6 +100,9 @@ define_node_types! {
     String {
         value: RcString,
     }
+    Array {
+        elements: Vec<Node<Expression>>,
+    }
 
     Program {
         body: Node<Block>,
@@ -180,6 +183,7 @@ define_collector_enums! {
         Binary,
     }
     Literal {
+        Array,
         String,
         Number,
         Boolean,
@@ -189,13 +193,6 @@ define_collector_enums! {
         Variable,
         Access,
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum Primitive {
-    String(RcString),
-    Number(f64),
-    Boolean(bool),
 }
 
 macro define_node_types(

@@ -1,1 +1,8 @@
-print(1, nil, true, "swag", Object())
+print([1, 2, 3, "swag"])
+
+def swag(a, b)
+    print(a + b)
+end
+
+swag(1, 3)
+swag("yolo", "swag")

@@ -137,7 +137,7 @@ access = {
 }
 
 call = {
-    primary ~ expr_list?
+    primary ~ arg_list?
 }
 
 primary = {
@@ -158,13 +158,17 @@ variable = {
     ident
 }
 
+arg_list = {
+    ("(" ~ ")") | 
+    ("(" ~ expr_list ~ ")")
+}
+
 expr_list = {
-    ("(" ~ ")") |
-    ("(" ~ expr ~ ("," ~ expr)* ~ ","? ~")")
+    expr ~ ("," ~ expr)* ~ ","?
 }
 
 literal = {
-    number | string | bool | nil
+    array | number | string | bool | nil
 }
 
 bool = @{ "true" | "false" }
@@ -189,6 +193,11 @@ mantissa = _{ ASCII_DIGIT+ }
 
 string = @{
     "\"" ~ string_inner ~ "\""
+}
+
+array = {
+    ("[" ~ "]") | 
+    ("[" ~ expr_list ~ "]")
 }
 
 string_inner = ${(!"\"" ~ ANY)*}

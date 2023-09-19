@@ -1,10 +1,11 @@
+use object::Primitive;
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::runtime::Error::NoSuchVariable;
-use crate::types::{NodeMeta, Primitive, RcString};
+use crate::types::{NodeMeta, RcString};
 
 mod bootstrap;
 mod interpret;
@@ -114,6 +115,14 @@ impl Runtime {
             .borrow_mut()
             .set_primitive(Primitive::Number(value));
         number_obj
+    }
+
+    pub fn create_array(&mut self, elements: Vec<ObjectRef>) -> ObjectRef {
+        let array_obj = self.create_object(self.builtins.Array.clone());
+        array_obj
+            .borrow_mut()
+            .set_primitive(Primitive::Array(elements));
+        array_obj
     }
 
     pub fn create_object(&mut self, class: ObjectRef) -> ObjectRef {

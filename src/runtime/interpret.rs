@@ -109,7 +109,7 @@ impl Runtime {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&binary.v.op);
-                self.perform_call(lhs, method_name, vec![rhs])
+                self.perform_call(lhs, method_name, [rhs])
             }
         }
     }
@@ -152,7 +152,7 @@ impl Runtime {
         &mut self,
         mut receiver: ObjectRef,
         method_name: &str,
-        arguments: Vec<ObjectRef>,
+        arguments: impl IntoIterator<Item = ObjectRef>,
     ) -> Result<ObjectRef> {
         let method;
         let class;
@@ -179,6 +179,7 @@ impl Runtime {
             };
             is_init = false;
         }
+        let arguments: Vec<ObjectRef> = arguments.into_iter().collect();
         match &method.body {
             MethodBody::User(body) => {
                 if arguments.len() != method.params.len() {
@@ -244,6 +245,15 @@ impl Runtime {
             Literal::String(string) => Ok(self.create_string(string.v.value)),
             Literal::Number(number) => Ok(self.create_number(number.value)),
             Literal::Boolean(boolean) => Ok(self.create_bool(boolean.value)),
+            Literal::Array(array) => {
+                let elements = array
+                    .v
+                    .elements
+                    .into_iter()
+                    .map(|node| self.eval(node))
+                    .collect::<Result<_, _>>()?;
+                Ok(self.create_array(elements))
+            }
             Literal::Nil(_) => Ok(self.nil()),
         }
     }

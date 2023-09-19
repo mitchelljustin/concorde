@@ -1,9 +1,9 @@
 use std::ops::Add;
 
-use crate::runtime::object::{MethodBody, Object, ObjectRef, Param};
+use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::ArityMismatch;
 use crate::runtime::Runtime;
-use crate::types::{Primitive, RcString};
+use crate::types::RcString;
 
 #[allow(non_upper_case_globals)]
 pub mod builtin {
@@ -17,6 +17,7 @@ pub mod builtin {
         pub const Main: &str = "Main";
         pub const Bool: &str = "Bool";
         pub const Number: &str = "Number";
+        pub const Array: &str = "Array";
     }
 
     pub mod property {
@@ -137,6 +138,7 @@ define_builtins!(Builtins {
     NilClass,
     Bool,
     Number,
+    Array,
     Main,
     bool_true,
     bool_false,
@@ -182,6 +184,9 @@ impl Runtime {
         // create nil
         self.builtins.NilClass = self.create_simple_class(builtin::class::NilClass.into());
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
+
+        // create Array
+        self.builtins.Array = self.create_simple_class(builtin::class::Array.into());
 
         // create booleans
         self.builtins.Bool = self.create_simple_class(builtin::class::Bool.into());
@@ -294,12 +299,12 @@ impl Runtime {
 
             fn __eq__(other) {
                 let result = this.borrow().string().unwrap() == other.borrow().string().unwrap();
-                self.create_bool(result)
+                runtime.create_bool(result)
             }
 
             fn __neq__(other) {
                 let result = this.borrow().string().unwrap() != other.borrow().string().unwrap();
-                self.create_bool(result)
+                runtime.create_bool(result)
             }
 
             fn __add__(other) {
@@ -335,6 +340,25 @@ impl Runtime {
                 runtime.create_string(this.borrow().bool().unwrap().to_string().into())
             }
         );
+        define_system_methods!(
+            [class=self.builtins.Array, runtime=runtime, method_name=method_name, this=this]
+            fn to_s() {
+                let objects = this.borrow().array().unwrap();
+                let strings = objects
+                    .into_iter()
+                    .map(|object|
+                        runtime
+                            .perform_call(
+                                object,
+                                builtin::method::to_s,
+                                vec![],
+                            )
+                            .map(|string| string.borrow().string().unwrap().to_string()))
+                    .collect::<Result<Vec<String>, _>>()?;
+                let inner = strings.join(", ");
+                runtime.create_string(format!("[{inner}]").into())
+            }
+        );
         self.builtins
             .Main
             .borrow_mut()
@@ -344,8 +368,7 @@ impl Runtime {
                 MethodBody::System(|runtime, _this, _method_name, args| {
                     let arg_count = args.len();
                     for (i, arg) in args.into_iter().enumerate() {
-                        let string_obj =
-                            runtime.perform_call(arg, builtin::method::to_s, vec![])?;
+                        let string_obj = runtime.perform_call(arg, builtin::method::to_s, None)?;
                         print!("{}", string_obj.borrow().string().unwrap());
                         if i < arg_count - 1 {
                             print!(" ");

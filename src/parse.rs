@@ -6,9 +6,9 @@ use pest_derive::Parser;
 
 use crate::parse::Error::IllegalLValue;
 use crate::types::{
-    Access, AnyNodeVariant, Assignment, Binary, Block, Boolean, Call, ClassDefinition, Expression,
-    Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number,
-    Operator, Parameter, Program, Statement, String as StringVariant, TopError, Variable,
+    Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Call, ClassDefinition,
+    Expression, Ident, IfElse, LValue, Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant,
+    Number, Operator, Parameter, Program, Statement, String as StringVariant, TopError, Variable,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -161,12 +161,13 @@ impl SourceParser {
             Rule::access => self.parse_access(pair),
             Rule::call => {
                 let mut inner = pair.clone().into_inner();
-                let target = inner.next().unwrap();
-                let Some(expr_list) = inner.next() else {
-                    return self.parse_expression(target);
+                let target = self.parse_expression(inner.next().unwrap())?;
+                let Some(arg_list) = inner.next() else {
+                    return Ok(target);
                 };
+                let expr_list = arg_list.into_inner().next().unwrap();
                 let arguments = self.parse_list(expr_list, Self::parse_expression)?;
-                let target = Box::new(self.parse_expression(target)?);
+                let target = Box::new(target);
                 Ok(Expression::Call(Call { target, arguments }.into_node(&pair)).into_node(&pair))
             }
             Rule::literal => {
@@ -239,6 +240,11 @@ impl SourceParser {
                 .into_node(&pair),
             )
             .into_node(&pair)),
+            Rule::array => {
+                let expr_list = pair.clone().into_inner().next().unwrap();
+                let elements = self.parse_list(expr_list, Self::parse_expression)?;
+                Ok(Literal::Array(Array { elements }.into_node(&pair)).into_node(&pair))
+            }
             rule => unreachable!("{:?}", rule),
         }
     }

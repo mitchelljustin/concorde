@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
+use crate::runtime::{Result, Runtime};
 use crate::runtime::bootstrap::builtin;
 use crate::runtime::Error::DuplicateDefinition;
-use crate::runtime::{Result, Runtime};
-use crate::types::{Block, Node, Primitive, RcString};
+use crate::types::{Block, Node, RcString};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
@@ -29,6 +29,14 @@ pub enum MethodBody {
 pub enum Param {
     Positional(RcString),
     Vararg(RcString),
+}
+
+#[derive(Debug, Clone)]
+pub enum Primitive {
+    String(RcString),
+    Number(f64),
+    Boolean(bool),
+    Array(Vec<ObjectRef>),
 }
 
 #[derive(Debug)]
@@ -99,6 +107,13 @@ impl Object {
 
     pub fn bool(&self) -> Option<bool> {
         let Primitive::Boolean(value) = self.primitive.clone().unwrap() else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn array(&self) -> Option<Vec<ObjectRef>> {
+        let Primitive::Array(value) = self.primitive.clone().unwrap() else {
             return None;
         };
         Some(value)
