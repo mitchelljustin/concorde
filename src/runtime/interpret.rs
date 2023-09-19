@@ -89,8 +89,8 @@ impl Runtime {
         match expression.v {
             Expression::Variable(var) => self.resolve(var.ident.name.as_ref()),
             Expression::Call(call) => {
-                let (method_name, arguments) = self.eval_call(call)?;
-                self.perform_call(self.current_receiver(), method_name, arguments)
+                let (method_name, arguments) = self.eval_call_parts(call)?;
+                self.perform_call(self.current_receiver(), &method_name, arguments)
             }
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
@@ -109,12 +109,12 @@ impl Runtime {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&binary.v.op);
-                self.perform_call(lhs, method_name.into(), vec![rhs])
+                self.perform_call(lhs, method_name, vec![rhs])
             }
         }
     }
 
-    fn eval_call(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
+    fn eval_call_parts(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
         let Call { target, arguments } = call.v;
         let arguments = arguments
             .into_iter()
@@ -141,42 +141,43 @@ impl Runtime {
                 });
             }
             Expression::Call(call) => {
-                let (method_name, arguments) = self.eval_call(call)?;
-                self.perform_call(target, method_name, arguments)
+                let (method_name, arguments) = self.eval_call_parts(call)?;
+                self.perform_call(target, &method_name, arguments)
             }
             _ => unimplemented!(),
         }
     }
 
-    fn perform_call(
+    pub fn perform_call(
         &mut self,
         mut receiver: ObjectRef,
-        method_name: RcString,
+        method_name: &str,
         arguments: Vec<ObjectRef>,
     ) -> Result<ObjectRef> {
         let method;
         let class;
-        if let Ok(class_var) = self.resolve(&method_name) && self.is_class(&class_var) {
+        let is_init;
+        if let Ok(class_var) = self.resolve(method_name) && self.is_class(&class_var) {
             class = class_var;
             receiver = self.create_object(class.clone());
             let Some(init_method) = class.borrow().resolve_method(builtin::method::init) else {
                 return Ok(receiver);
             };
             method = init_method;
+            is_init = true;
         } else {
             class = receiver.borrow().__class__();
-            let main = self.builtins.Main.clone();
-            let main_ref = main.borrow();
-            method = if let Some(method) = class.borrow().resolve_method(&method_name) {
+            method = if let Some(method) = class.borrow().resolve_method(method_name) {
                 method
-            } else if let Some(method) = main_ref.resolve_method(&method_name) {
+            } else if let Some(method) = self.builtins.Main.borrow().resolve_method(method_name) {
                 method
             } else {
                 return Err(NoSuchMethod {
                     class_name: class.borrow().__name__().unwrap(),
-                    method_name: method_name.clone(),
+                    method_name: method_name.into(),
                 });
             };
+            is_init = false;
         }
         match &method.body {
             MethodBody::User(body) => {
@@ -185,7 +186,7 @@ impl Runtime {
                         expected: method.params.len(),
                         actual: arguments.len(),
                         class_name: class.borrow().__name__().unwrap(),
-                        method_name: method_name.clone(),
+                        method_name: method_name.into(),
                     });
                 }
                 let variables = method
@@ -200,17 +201,22 @@ impl Runtime {
                     })
                     .collect();
                 self.stack.push(StackFrame {
-                    receiver: Some(receiver),
-                    method_name: Some(method_name.clone()),
+                    receiver: Some(receiver.clone()),
+                    method_name: Some(method_name.into()),
                     variables,
                     ..StackFrame::default()
                 });
                 let result = self.eval_block(body.clone());
                 self.stack.pop();
-                result
+                if is_init {
+                    result?;
+                    Ok(receiver)
+                } else {
+                    result
+                }
             }
             MethodBody::System(function) => {
-                function(self, receiver.clone(), method_name.clone(), arguments)
+                function(self, receiver.clone(), method_name, arguments)
             }
         }
     }

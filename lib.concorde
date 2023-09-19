@@ -1,13 +1,1 @@
-class Person
-    def init(name)
-        self.name = name
-    end
-
-    def greet()
-        print("Hi,", self.name)
-    end
-end
-p = Person("Mitch")
-p.greet()
-class Dumb
-end
+print(1, nil, true, "swag", Object())

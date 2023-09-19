@@ -1,8 +1,9 @@
+use std::ops::Add;
+
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param};
 use crate::runtime::Error::ArityMismatch;
 use crate::runtime::Runtime;
 use crate::types::{Primitive, RcString};
-use std::ops::Add;
 
 #[allow(non_upper_case_globals)]
 pub mod builtin {
@@ -25,6 +26,7 @@ pub mod builtin {
 
     pub mod method {
         pub const init: &str = "init";
+        pub const to_s: &str = "to_s";
     }
 
     pub mod op {
@@ -116,7 +118,7 @@ macro define_system_methods(
                     let Ok([$($param,)*]) = <[ObjectRef; count!($($param)*)]>::try_from(args) else {
                         return Err(ArityMismatch {
                             class_name: $this.borrow().__class__().borrow().__name__().unwrap(),
-                            method_name: $method_name,
+                            method_name: $method_name.into(),
                             expected: count!($($param)*),
                             actual: arg_count,
                         });
@@ -171,7 +173,9 @@ impl Runtime {
             .borrow_mut()
             .set_property(builtin::property::__name__.into(), name_String_obj);
 
-        self.builtins.Object = self.create_class(builtin::class::Object.into(), None);
+        let name_Object: RcString = builtin::class::Object.into();
+        self.builtins.Object = self.create_class(name_Object.clone(), None);
+        self.assign_global(name_Object, self.builtins.Object.clone());
         self.builtins.String.borrow_mut().superclass = Some(self.builtins.Object.clone());
         // now we can create simple classes
 
@@ -276,6 +280,10 @@ impl Runtime {
                 let result = this.borrow().number().unwrap().powf(power);
                 runtime.create_number(result)
             }
+
+            fn to_s() {
+                runtime.create_string(this.borrow().number().unwrap().to_string().into())
+            }
         );
         define_system_methods!(
             [class=self.builtins.String, runtime=runtime, method_name=method_name, this=this]
@@ -284,11 +292,47 @@ impl Runtime {
                 runtime.create_string(result)
             }
 
-            fn concat(other) {
+            fn __eq__(other) {
+                let result = this.borrow().string().unwrap() == other.borrow().string().unwrap();
+                self.create_bool(result)
+            }
+
+            fn __neq__(other) {
+                let result = this.borrow().string().unwrap() != other.borrow().string().unwrap();
+                self.create_bool(result)
+            }
+
+            fn __add__(other) {
                 let me = this.borrow().string().unwrap();
                 let other: RcString = other.borrow().string().unwrap();
                 let result = String::from(me.as_ref()).add(other.as_ref()).into();
                 runtime.create_string(result)
+            }
+
+            fn to_s() {
+                this
+            }
+        );
+        define_system_methods!(
+            [class=self.builtins.Object, runtime=runtime, method_name=method_name, this=this]
+            fn __debug__() {
+                runtime.create_string(this.borrow().__debug__())
+            }
+
+            fn to_s() {
+                runtime.create_string("Object()".into())
+            }
+        );
+        define_system_methods!(
+            [class=self.builtins.NilClass, runtime=runtime, method_name=method_name, this=this]
+            fn to_s() {
+                runtime.create_string("nil".into())
+            }
+        );
+        define_system_methods!(
+            [class=self.builtins.Bool, runtime=runtime, method_name=method_name, this=this]
+            fn to_s() {
+                runtime.create_string(this.borrow().bool().unwrap().to_string().into())
             }
         );
         self.builtins
@@ -300,19 +344,9 @@ impl Runtime {
                 MethodBody::System(|runtime, _this, _method_name, args| {
                     let arg_count = args.len();
                     for (i, arg) in args.into_iter().enumerate() {
-                        let arg_borrowed = arg.borrow();
-                        let arg_class = arg_borrowed.__class__();
-                        if arg_class == runtime.builtins.String {
-                            print!("{}", arg_borrowed.string().unwrap());
-                        } else if arg_class == runtime.builtins.Number {
-                            print!("{}", arg_borrowed.number().unwrap());
-                        } else if arg_class == runtime.builtins.Bool {
-                            print!("{}", arg_borrowed.bool().unwrap());
-                        } else if arg == runtime.builtins.nil {
-                            print!("nil");
-                        } else if arg_class == runtime.builtins.Class {
-                            print!("{}", arg_borrowed.__name__().unwrap());
-                        }
+                        let string_obj =
+                            runtime.perform_call(arg, builtin::method::to_s, vec![])?;
+                        print!("{}", string_obj.borrow().string().unwrap());
                         if i < arg_count - 1 {
                             print!(" ");
                         }

@@ -15,20 +15,23 @@ pub type MethodRef = Rc<Method>;
 pub type SystemMethod = fn(
     runtime: &mut Runtime,
     this: ObjectRef,
-    method_name: RcString,
+    method_name: &str,
     arguments: Vec<ObjectRef>,
 ) -> Result<ObjectRef>;
 
+#[derive(Debug)]
 pub enum MethodBody {
     User(Node<Block>),
     System(SystemMethod),
 }
 
+#[derive(Debug)]
 pub enum Param {
     Positional(RcString),
     Vararg(RcString),
 }
 
+#[derive(Debug)]
 pub struct Method {
     pub name: RcString,
     pub class: WeakObjectRef,
