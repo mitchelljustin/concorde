@@ -24,7 +24,12 @@ stmt = {
     loop_next |
     for_in |
     while_loop |
+    use_stmt |
     expr
+}
+
+use_stmt = {
+    "use" ~ path
 }
 
 for_in = {

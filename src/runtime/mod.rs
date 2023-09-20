@@ -5,7 +5,7 @@ use object::Primitive;
 
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
-use crate::types::{NodeMeta, RcString};
+use crate::types::NodeMeta;
 
 mod bootstrap;
 mod interpret;
@@ -16,30 +16,30 @@ pub enum Error {
     #[error("control flow")]
     ControlFlow(ControlFlow<()>),
     #[error("duplicate definition of method '{name}'")]
-    DuplicateDefinition { class: ObjectRef, name: RcString },
+    DuplicateDefinition { class: ObjectRef, name: String },
     #[error("no such variable: '{name}': {node}")]
-    NoSuchVariable { name: RcString, node: NodeMeta },
+    NoSuchVariable { name: String, node: NodeMeta },
     #[error("no such method: '{class_name}::{method_name}'")]
     NoSuchMethod {
-        class_name: RcString,
-        method_name: RcString,
+        class_name: String,
+        method_name: String,
     },
     #[error("not a class method: '{class_name}::{method_name}'")]
     NotAClassMethod {
-        class_name: RcString,
-        method_name: RcString,
+        class_name: String,
+        method_name: String,
     },
     #[error("arity mismatch for '{class_name}::{method_name}()': expected {expected} args, got {actual}")]
     ArityMismatch {
-        class_name: RcString,
-        method_name: RcString,
+        class_name: String,
+        method_name: String,
         expected: usize,
         actual: usize,
     },
     #[error("object {target} has no property '{member}': {node}")]
     UndefinedProperty {
-        target: RcString,
-        member: RcString,
+        target: String,
+        member: String,
         node: NodeMeta,
     },
     #[error("expression is not callable: {node}")]
@@ -49,11 +49,11 @@ pub enum Error {
     #[error("index error: {error}")]
     IndexError { error: &'static str },
     #[error("illegal constructor call: {class}")]
-    IllegalConstructorCall { class: RcString },
+    IllegalConstructorCall { class: String },
     #[error("type error: expected {expected}, got {class}")]
-    TypeError { expected: RcString, class: RcString },
+    TypeError { expected: String, class: String },
     #[error("bad path contains non-class '{non_class}': {path}")]
-    BadPath { non_class: RcString, path: NodeMeta },
+    BadPath { non_class: String, path: NodeMeta },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -62,8 +62,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct StackFrame {
     receiver: Option<ObjectRef>,
     class: Option<ObjectRef>,
-    method_name: Option<RcString>,
-    variables: HashMap<RcString, ObjectRef>,
+    method_name: Option<String>,
+    variables: HashMap<String, ObjectRef>,
 }
 
 pub struct Runtime {
@@ -104,7 +104,7 @@ impl Runtime {
             .expect("no receiver")
     }
 
-    pub fn create_string(&mut self, value: RcString) -> ObjectRef {
+    pub fn create_string(&mut self, value: String) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
         string_obj
             .borrow_mut()
@@ -146,7 +146,7 @@ impl Runtime {
         object
     }
 
-    pub fn create_class(&mut self, name: RcString, superclass: Option<ObjectRef>) -> ObjectRef {
+    pub fn create_class(&mut self, name: String, superclass: Option<ObjectRef>) -> ObjectRef {
         let class = self.create_object(self.builtins.Class.clone());
         class.borrow_mut().superclass = superclass;
         let name_obj = self.create_string(name.clone());
@@ -157,11 +157,11 @@ impl Runtime {
         class
     }
 
-    pub fn create_simple_class(&mut self, name: RcString) -> ObjectRef {
+    pub fn create_simple_class(&mut self, name: String) -> ObjectRef {
         self.create_class(name, Some(self.builtins.Object.clone()))
     }
 
-    pub fn assign_global(&mut self, name: RcString, object: ObjectRef) {
+    pub fn assign_global(&mut self, name: String, object: ObjectRef) {
         self.stack[0].variables.insert(name, object);
     }
 
@@ -173,7 +173,7 @@ impl Runtime {
             .cloned()
     }
 
-    pub fn assign_variable(&mut self, name: RcString, object: ObjectRef) {
+    pub fn assign_variable(&mut self, name: String, object: ObjectRef) {
         for frame in self.stack.iter_mut().rev() {
             if frame.variables.contains_key(&name) {
                 frame.variables.insert(name.clone(), object.clone());
@@ -183,7 +183,7 @@ impl Runtime {
         self.define_variable(name, object);
     }
 
-    fn define_variable(&mut self, name: RcString, object: ObjectRef) {
+    fn define_variable(&mut self, name: String, object: ObjectRef) {
         self.stack
             .last_mut()
             .expect("no scope")

@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
-use std::rc::Rc;
 
 use pest::iterators::Pair;
 
@@ -18,11 +17,9 @@ pub enum TopError {
     IO(#[from] io::Error),
 }
 
-pub type RcString = Rc<str>;
-
 #[derive(Debug, Clone)]
 pub struct NodeMeta {
-    pub source: std::string::String,
+    pub source: String,
     pub rule: Rule,
     pub line_col: (usize, usize),
 }
@@ -80,7 +77,7 @@ define_node_types! {
     [AnyNodeVariant]
 
     Ident {
-        name: RcString,
+        name: String,
     }
     Number {
         value: f64,
@@ -88,8 +85,8 @@ define_node_types! {
     Boolean {
         value: bool,
     }
-    String {
-        value: RcString,
+    StringLit {
+        value: String,
     }
     Array {
         elements: Vec<Node<Expression>>,
@@ -146,12 +143,15 @@ define_node_types! {
     Path {
         components: Vec<Node<Variable>>,
     }
+    Use {
+        path: Node<Path>,
+    }
     Block {
         statements: Vec<Node<Statement>>,
     }
     ClassDefinition {
         name: Node<Ident>,
-        // fields: Vec<RcString>,
+        // fields: Vec<String>,
         body: Vec<Node<Statement>>,
     }
     Parameter {
@@ -175,6 +175,7 @@ define_collector_enums! {
         Expression,
         MethodDefinition,
         ClassDefinition,
+        Use,
     }
     Expression {
         Index,
@@ -189,7 +190,7 @@ define_collector_enums! {
     }
     Literal {
         Array,
-        String,
+        StringLit,
         Number,
         Boolean,
         Nil,

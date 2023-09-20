@@ -9,7 +9,7 @@ use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
     ClassDefinition, Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition,
     Next, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program, Statement,
-    String as StringVariant, TopError, Unary, Variable, WhileLoop,
+    StringLit, TopError, Unary, Use, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -111,6 +111,12 @@ impl SourceParser {
             Rule::loop_next => Ok(Statement::Next(Next {}.into_node(&pair)).into_node(&pair)),
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))
+            }
+            Rule::use_stmt => {
+                let path = pair.clone().into_inner().next().unwrap();
+                let mut components = self.parse_list(path.clone(), Self::parse_variable)?;
+                let path = Path { components }.into_node(&path);
+                Ok(Statement::Use(Use { path }.into_node(&pair)).into_node(&pair))
             }
             rule => unreachable!("{:?}", rule),
         }
@@ -320,8 +326,8 @@ impl SourceParser {
                 let value: f64 = pair.as_str().parse()?;
                 Ok(Literal::Number(Number { value }.into_node(&pair)).into_node(&pair))
             }
-            Rule::string => Ok(Literal::String(
-                StringVariant {
+            Rule::string => Ok(Literal::StringLit(
+                StringLit {
                     value: pair.clone().into_inner().next().unwrap().as_str().into(),
                 }
                 .into_node(&pair),

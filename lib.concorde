@@ -1,13 +1,16 @@
+use IO
+
 class Gerald
     def swag()
-        print("pokey")
+        IO::print("pokey")
     end
 
     def self::yolo()
-        print("gumby")
+        IO::print("gumby")
     end
 end
 
 Gerald::yolo()
 g = Gerald()
 g.swag()
+IO::print(Main)

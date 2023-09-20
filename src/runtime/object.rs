@@ -6,7 +6,7 @@ use std::rc::{Rc, Weak};
 use crate::runtime::bootstrap::builtin;
 use crate::runtime::Error::DuplicateDefinition;
 use crate::runtime::{Result, Runtime};
-use crate::types::{Block, Node, RcString};
+use crate::types::{Block, Node};
 
 pub type WeakObjectRef = Weak<RefCell<Object>>;
 pub type ObjectRef = Rc<RefCell<Object>>;
@@ -27,13 +27,13 @@ pub enum MethodBody {
 
 #[derive(Debug)]
 pub enum Param {
-    Positional(RcString),
-    Vararg(RcString),
+    Positional(String),
+    Vararg(String),
 }
 
 #[derive(Debug, Clone)]
 pub enum Primitive {
-    String(RcString),
+    String(String),
     Number(f64),
     Boolean(bool),
     Array(Vec<ObjectRef>),
@@ -41,7 +41,7 @@ pub enum Primitive {
 
 #[derive(Debug)]
 pub struct Method {
-    pub name: RcString,
+    pub name: String,
     pub class: WeakObjectRef,
     pub params: Vec<Param>,
     pub body: MethodBody,
@@ -52,8 +52,8 @@ pub struct Object {
     pub(super) class: Option<ObjectRef>,
     pub(super) superclass: Option<ObjectRef>,
     weak_self: WeakObjectRef,
-    properties: HashMap<RcString, ObjectRef>,
-    methods: HashMap<RcString, MethodRef>,
+    properties: HashMap<String, ObjectRef>,
+    methods: HashMap<String, MethodRef>,
     pub(super) primitive: Option<Primitive>,
 }
 
@@ -66,7 +66,7 @@ impl PartialEq for Object {
 const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
-    pub fn __name__(&self) -> Option<RcString> {
+    pub fn __name__(&self) -> Option<String> {
         Some(
             self.properties
                 .get(builtin::property::__name__)?
@@ -76,7 +76,7 @@ impl Object {
         )
     }
 
-    pub fn __debug__(&self) -> RcString {
+    pub fn __debug__(&self) -> String {
         let class_name = self
             .class
             .as_ref()
@@ -99,7 +99,7 @@ impl Object {
         Some(value)
     }
 
-    pub fn string(&self) -> Option<RcString> {
+    pub fn string(&self) -> Option<String> {
         let Primitive::String(value) = self.primitive.clone().unwrap() else {
             return None;
         };
@@ -120,7 +120,7 @@ impl Object {
         Some(value)
     }
 
-    pub fn set_property(&mut self, name: RcString, value: ObjectRef) {
+    pub fn set_property(&mut self, name: String, value: ObjectRef) {
         self.properties.insert(name, value);
     }
 
@@ -138,7 +138,7 @@ impl Object {
 
     pub fn define_method(
         &mut self,
-        method_name: RcString,
+        method_name: String,
         params: Vec<Param>,
         body: MethodBody,
         is_class_method: bool,

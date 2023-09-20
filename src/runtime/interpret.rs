@@ -1,7 +1,7 @@
 use std::ops::ControlFlow;
 
 use crate::runtime::bootstrap::builtin;
-use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
+use crate::runtime::object::{MethodBody, ObjectRef, Param};
 use crate::runtime::Error::{
     ArityMismatch, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable, NotAClassMethod,
     NotCallable, UndefinedProperty,
@@ -119,6 +119,7 @@ impl Runtime {
             }
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
             Statement::Next(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
+            Statement::Use(_) => todo!(),
         };
         Ok(())
     }
@@ -295,7 +296,7 @@ impl Runtime {
             } else {
                 class = receiver.borrow().__class__();
             }
-            method = self.resolve_method(&class, method_name).ok_or(NoSuchMethod {
+            method = class.borrow().resolve_method(method_name).ok_or(NoSuchMethod {
                 class_name: class.borrow().__name__().unwrap(),
                 method_name: method_name.into(),
             })?;
@@ -350,16 +351,6 @@ impl Runtime {
         }
     }
 
-    fn resolve_method(&mut self, class: &ObjectRef, method_name: &str) -> Option<MethodRef> {
-        if let Some(method) = class.borrow().resolve_method(method_name) {
-            return Some(method);
-        }
-        if let Some(method) = self.builtins.Main.borrow().resolve_method(method_name) {
-            return Some(method);
-        }
-        None
-    }
-
     fn is_class(&self, object: &ObjectRef) -> bool {
         object.borrow().__class__() == self.builtins.Class
     }
@@ -387,7 +378,7 @@ impl Runtime {
 
     fn eval_literal(&mut self, literal: Node<Literal>) -> Result<ObjectRef> {
         match literal.v {
-            Literal::String(string) => Ok(self.create_string(string.v.value)),
+            Literal::StringLit(string) => Ok(self.create_string(string.v.value)),
             Literal::Number(number) => Ok(self.create_number(number.v.value)),
             Literal::Boolean(boolean) => Ok(self.create_bool(boolean.v.value)),
             Literal::Array(array) => {

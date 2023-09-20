@@ -1,9 +1,8 @@
-use std::ops::{Add, Rem};
+use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
 use crate::runtime::Runtime;
-use crate::types::RcString;
 
 #[allow(non_upper_case_globals)]
 pub mod builtin {
@@ -15,6 +14,7 @@ pub mod builtin {
         pub const String: &str = "String";
         pub const NilClass: &str = "NilClass";
         pub const Main: &str = "Main";
+        pub const IO: &str = "IO";
         pub const Bool: &str = "Bool";
         pub const Number: &str = "Number";
         pub const Array: &str = "Array";
@@ -150,6 +150,7 @@ define_builtins!(Builtins {
     Bool,
     Number,
     Array,
+    IO,
     Main,
     bool_true,
     bool_false,
@@ -169,11 +170,11 @@ impl Runtime {
         Class.borrow_mut().class = Some(Class.clone());
         // now we can create classes
         self.all_objects.push(Class.borrow().weak_self());
-        let name_Class: RcString = builtin::class::Class.into();
+        let name_Class: String = builtin::class::Class.into();
         self.assign_global(name_Class.clone(), Class.clone());
 
         self.builtins.String = self.create_object(Class.clone());
-        let name_String: RcString = builtin::class::String.into();
+        let name_String: String = builtin::class::String.into();
         self.assign_global(name_String.clone(), self.builtins.String.clone());
         // now we can create strings
         let name_Class_obj = self.create_string(name_Class);
@@ -186,7 +187,7 @@ impl Runtime {
             .borrow_mut()
             .set_property(builtin::property::__name__.into(), name_String_obj);
 
-        let name_Object: RcString = builtin::class::Object.into();
+        let name_Object: String = builtin::class::Object.into();
         self.builtins.Object = self.create_class(name_Object.clone(), None);
         self.assign_global(name_Object, self.builtins.Object.clone());
         self.builtins.String.borrow_mut().superclass = Some(self.builtins.Object.clone());
@@ -221,6 +222,8 @@ impl Runtime {
         let root_frame = &mut self.stack[0];
         root_frame.receiver = Some(main);
         root_frame.class = Some(self.builtins.Main.clone());
+
+        self.builtins.IO = self.create_simple_class(builtin::class::IO.into());
     }
 
     fn bootstrap_stdlib(&mut self) {
@@ -340,9 +343,9 @@ impl Runtime {
                         class: other.borrow().__class__().borrow().__name__().unwrap(),
                     });
                 }
-                let me = this.borrow().string().unwrap();
-                let other: RcString = other.borrow().string().unwrap();
-                let result = String::from(me.as_ref()).add(other.as_ref()).into();
+                let mut me = this.borrow().string().unwrap();
+                let other = other.borrow().string().unwrap();
+                let result = me.add(&other);
                 runtime.create_string(result)
             }
 
@@ -353,10 +356,11 @@ impl Runtime {
                         class: other.borrow().__class__().borrow().__name__().unwrap(),
                     });
                 }
-                let me = this.borrow().string().unwrap();
-                let other: RcString = other.borrow().string().unwrap();
-                let result = String::from(me.as_ref()).add(other.as_ref()).into();
-                this.borrow_mut().set_primitive(Primitive::String(result));
+                let Some(Primitive::String(string)) = &mut this.borrow_mut().primitive else {
+                    unreachable!();
+                };
+                let other = other.borrow().string().unwrap();
+                string.push_str(&other);
                 runtime.nil()
             }
 
@@ -381,7 +385,6 @@ impl Runtime {
                     class: this.borrow().__class__().borrow().__name__().unwrap(),
                 });
             }
-
 
             fn to_s() {
                 runtime.create_string("nil".into())
@@ -472,8 +475,16 @@ impl Runtime {
                 })?
             }
         );
+
+        define_system_methods!(
+            [class=self.builtins.Class, runtime=runtime, method_name=method_name, this=this]
+            fn to_s() {
+                runtime.create_string(this.borrow().__name__().unwrap())
+            }
+        );
+
         self.builtins
-            .Main
+            .IO
             .borrow_mut()
             .define_method(
                 "print".into(),
