@@ -1,10 +1,10 @@
-use object::Primitive;
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 
+use object::Primitive;
+
 use crate::runtime::bootstrap::{builtin, Builtins};
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
-use crate::runtime::Error::NoSuchVariable;
 use crate::types::{NodeMeta, RcString};
 
 mod bootstrap;

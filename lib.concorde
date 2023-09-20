@@ -1,1 +1,13 @@
-true + false
+class Gerald
+    def swag()
+        print("pokey")
+    end
+
+    def self::yolo()
+        print("gumby")
+    end
+end
+
+Gerald::yolo()
+g = Gerald()
+g.swag()

@@ -490,7 +490,7 @@ impl Runtime {
                     println!();
                     Ok(runtime.nil())
                 }),
-                false,
+                true,
             )
             .unwrap();
     }

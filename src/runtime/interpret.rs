@@ -275,6 +275,15 @@ impl Runtime {
             class = class_var;
             receiver = self.create_object(class.clone());
             let Some(init_method) = class.borrow().resolve_method(builtin::method::init) else {
+                let arg_count = arguments.into_iter().count();
+                if arg_count > 0 {
+                    return Err(ArityMismatch {
+                        method_name: builtin::method::init.into(),
+                        class_name: class.borrow().__name__().unwrap(),
+                        expected: 0,
+                        actual: arg_count,
+                    });
+                }
                 return Ok(receiver);
             };
             method = init_method;
