@@ -135,7 +135,8 @@ macro define_system_methods(
                         });
                     };
                     Ok($body)
-                })
+                }),
+                false
             ).unwrap();
         )+
     }
@@ -489,6 +490,7 @@ impl Runtime {
                     println!();
                     Ok(runtime.nil())
                 }),
+                false,
             )
             .unwrap();
     }

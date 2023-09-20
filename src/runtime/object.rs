@@ -45,6 +45,7 @@ pub struct Method {
     pub class: WeakObjectRef,
     pub params: Vec<Param>,
     pub body: MethodBody,
+    pub is_class_method: bool,
 }
 
 pub struct Object {
@@ -140,6 +141,7 @@ impl Object {
         method_name: RcString,
         params: Vec<Param>,
         body: MethodBody,
+        is_class_method: bool,
     ) -> Result<()> {
         if self.methods.contains_key(&method_name) {
             return Err(DuplicateDefinition {
@@ -152,6 +154,7 @@ impl Object {
             class: self.weak_self.clone(),
             params,
             body,
+            is_class_method,
         };
         self.methods.insert(method_name, Rc::new(method));
         Ok(())

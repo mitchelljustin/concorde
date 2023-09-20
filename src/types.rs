@@ -143,6 +143,9 @@ define_node_types! {
     Variable {
         ident: Node<Ident>,
     }
+    Path {
+        components: Vec<Node<Variable>>,
+    }
     Block {
         statements: Vec<Node<Statement>>,
     }
@@ -155,6 +158,7 @@ define_node_types! {
         name: Node<Ident>,
     }
     MethodDefinition {
+        is_class_method: bool,
         name: Node<Ident>,
         parameters: Vec<Node<Parameter>>,
         body: Node<Block>,
@@ -178,6 +182,7 @@ define_collector_enums! {
         Call,
         Literal,
         Variable,
+        Path,
         IfElse,
         Binary,
         Unary,

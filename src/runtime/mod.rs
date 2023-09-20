@@ -17,10 +17,15 @@ pub enum Error {
     ControlFlow(ControlFlow<()>),
     #[error("duplicate definition of method '{name}'")]
     DuplicateDefinition { class: ObjectRef, name: RcString },
-    #[error("no such variable: '{name}'")]
-    NoSuchVariable { name: RcString },
+    #[error("no such variable: '{name}': {node}")]
+    NoSuchVariable { name: RcString, node: NodeMeta },
     #[error("no such method: '{class_name}::{method_name}'")]
     NoSuchMethod {
+        class_name: RcString,
+        method_name: RcString,
+    },
+    #[error("not a class method: '{class_name}::{method_name}'")]
+    NotAClassMethod {
         class_name: RcString,
         method_name: RcString,
     },
@@ -31,14 +36,14 @@ pub enum Error {
         expected: usize,
         actual: usize,
     },
-    #[error("object {target} has no property '{member}'\n    {access}")]
+    #[error("object {target} has no property '{member}': {node}")]
     UndefinedProperty {
         target: RcString,
         member: RcString,
-        access: NodeMeta,
+        node: NodeMeta,
     },
-    #[error("expression is not callable: {expr}")]
-    NotCallable { expr: NodeMeta },
+    #[error("expression is not callable: {node}")]
+    NotCallable { node: NodeMeta },
     #[error("illegal assignment target: {access}")]
     IllegalAssignmentTarget { access: NodeMeta },
     #[error("index error: {error}")]
@@ -47,6 +52,8 @@ pub enum Error {
     IllegalConstructorCall { class: RcString },
     #[error("type error: expected {expected}, got {class}")]
     TypeError { expected: RcString, class: RcString },
+    #[error("bad path contains non-class '{non_class}': {path}")]
+    BadPath { non_class: RcString, path: NodeMeta },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -158,13 +165,12 @@ impl Runtime {
         self.stack[0].variables.insert(name, object);
     }
 
-    pub fn resolve(&self, name: &str) -> Result<ObjectRef> {
+    pub fn resolve_variable(&self, name: &str) -> Option<ObjectRef> {
         if name == builtin::SELF {
-            return Ok(self.current_receiver());
+            return Some(self.current_receiver());
         }
         self.find_closest_in_stack(|frame| frame.variables.get(name))
             .cloned()
-            .ok_or(NoSuchVariable { name: name.into() })
     }
 
     pub fn assign_variable(&mut self, name: RcString, object: ObjectRef) {

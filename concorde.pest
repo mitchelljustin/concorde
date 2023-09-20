@@ -37,10 +37,12 @@ while_loop = {
     "while" ~ expr ~ NEWLINE ~
         stmts ~
     "end"
-} 
+}
+
+class_method_spec = { "self::" }
 
 method_def = {
-    "def" ~ ident ~ param_list ~ NEWLINE ~
+    "def" ~ class_method_spec? ~ ident ~ param_list ~ NEWLINE ~
         stmts ~
     "end"
 }
@@ -166,7 +168,7 @@ call = {
 primary = {
     literal |
     grouping |
-    variable
+    path
 }
 
 grouping = {
@@ -175,6 +177,10 @@ grouping = {
 
 lvalue = {
     index
+}
+
+path = {
+    variable ~ ("::" ~ variable)*
 }
 
 variable = {
@@ -217,7 +223,7 @@ KEYWORD = @{
 
 ident = @{
     !(KEYWORD ~ !XID_START) ~
-    (XID_START | "_") ~ XID_CONTINUE*
+    (XID_START | "_") ~ (XID_CONTINUE | "?")*
 }
 
 number = @{

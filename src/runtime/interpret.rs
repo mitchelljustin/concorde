@@ -1,15 +1,15 @@
 use std::ops::ControlFlow;
 
 use crate::runtime::bootstrap::builtin;
-use crate::runtime::object::{MethodBody, ObjectRef, Param};
+use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
 use crate::runtime::Error::{
-    ArityMismatch, IllegalAssignmentTarget, NoSuchMethod, NotCallable, UndefinedProperty,
+    ArityMismatch, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable, NotAClassMethod,
+    NotCallable, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, Block, Call, Expression, LValue, Literal, MethodDefinition, Node, Program, RcString,
-    Statement,
+    Access, Block, Expression, LValue, Literal, MethodDefinition, Node, Path, Program, Statement,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -136,18 +136,39 @@ impl Runtime {
             .map(|param| Param::Positional(param.v.name.v.name.clone()))
             .collect();
         let body = MethodBody::User(method_def.v.body);
-        class
-            .borrow_mut()
-            .define_method(method_name, params, body)?;
+        class.borrow_mut().define_method(
+            method_name,
+            params,
+            body,
+            method_def.v.is_class_method,
+        )?;
         Ok(())
     }
 
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
-            Expression::Variable(var) => self.resolve(var.v.ident.v.name.as_ref()),
+            Expression::Variable(var) => {
+                let name = &var.v.ident.v.name;
+                self.resolve_variable(name).ok_or(NoSuchVariable {
+                    name: name.clone(),
+                    node: var.meta,
+                })
+            }
             Expression::Call(call) => {
-                let (method_name, arguments) = self.eval_call_parts(call)?;
-                self.perform_call(self.current_receiver(), &method_name, arguments)
+                let target = call.v.target;
+                let (class_receiver, method_name) = match target.v {
+                    Expression::Variable(var) => (None, var.v.ident.v.name),
+                    Expression::Path(mut path) => {
+                        let method_component = path.v.components.pop().unwrap();
+                        let method_name = method_component.v.ident.v.name;
+                        let receiver = self.resolve_class_from_path(path)?;
+                        (Some(receiver), method_name)
+                    }
+                    _ => return Err(NotCallable { node: target.meta }),
+                };
+                let arguments = self.eval_expr_list(call.v.arguments)?;
+                let receiver = class_receiver.unwrap_or_else(|| self.current_receiver());
+                self.perform_call(receiver, &method_name, arguments)
             }
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
@@ -178,45 +199,64 @@ impl Runtime {
                 let method_name = builtin::op::method_for_unary_op(&unary.v.op.v).unwrap();
                 self.perform_call(rhs, method_name, None)
             }
+            Expression::Path(path) => self.resolve_class_from_path(path),
         }
+    }
+
+    fn resolve_class_from_path(&self, path: Node<Path>) -> Result<ObjectRef> {
+        let (start_class, class_components) = path.v.components.split_first().unwrap();
+        let receiver_name = &start_class.v.ident.v.name;
+        let mut receiver = self.resolve_variable(receiver_name).ok_or(NoSuchVariable {
+            name: receiver_name.clone(),
+            node: start_class.meta.clone(),
+        })?;
+        for component in class_components {
+            let member = &component.v.ident.v.name;
+            let child_receiver =
+                receiver
+                    .borrow()
+                    .get_property(member)
+                    .ok_or(UndefinedProperty {
+                        target: receiver.borrow().__debug__(),
+                        member: member.clone(),
+                        node: path.meta.clone(),
+                    })?;
+            if !self.is_class(&child_receiver) {
+                return Err(BadPath {
+                    path: path.meta,
+                    non_class: member.clone(),
+                });
+            }
+            receiver = child_receiver;
+        }
+        Ok(receiver)
     }
 
     fn is_falsy(&self, condition: ObjectRef) -> bool {
         condition == self.builtins.bool_false || condition == self.builtins.nil
     }
 
-    fn eval_call_parts(&mut self, call: Node<Call>) -> Result<(RcString, Vec<ObjectRef>)> {
-        let arguments = call
-            .v
-            .arguments
-            .into_iter()
-            .map(|argument| self.eval(argument))
-            .collect::<Result<Vec<_>, _>>()?;
-        let Expression::Variable(var) = call.v.target.v else {
-            return Err(NotCallable {
-                expr: call.v.target.meta,
-            });
-        };
-        let method_name = var.v.ident.v.name.clone();
-        Ok((method_name, arguments))
-    }
-
     fn eval_access(&mut self, access: Node<Access>) -> Result<ObjectRef> {
-        let Access { target, member } = access.v;
-        let target = self.eval(*target)?;
-        match member.v {
+        let target = self.eval(*access.v.target)?;
+        match access.v.member.v {
             Expression::Variable(var) => {
                 let member = &var.v.ident.v.name;
                 let value = target.borrow().get_property(member);
                 return value.ok_or(UndefinedProperty {
                     target: target.borrow().__debug__(),
                     member: member.clone(),
-                    access: access.meta,
+                    node: access.meta,
                 });
             }
             Expression::Call(call) => {
-                let (method_name, arguments) = self.eval_call_parts(call)?;
-                self.perform_call(target, &method_name, arguments)
+                let arguments = self.eval_expr_list(call.v.arguments)?;
+                let Expression::Variable(var) = call.v.target.v else {
+                    return Err(NotCallable {
+                        node: call.v.target.meta,
+                    });
+                };
+                let method_name = &var.v.ident.v.name;
+                self.perform_call(target, method_name, arguments)
             }
             _ => unimplemented!(),
         }
@@ -231,7 +271,7 @@ impl Runtime {
         let method;
         let class;
         let is_init;
-        if let Ok(class_var) = self.resolve(method_name) && self.is_class(&class_var) {
+        if let Some(class_var) = self.resolve_variable(method_name) && self.is_class(&class_var) {
             class = class_var;
             receiver = self.create_object(class.clone());
             let Some(init_method) = class.borrow().resolve_method(builtin::method::init) else {
@@ -240,17 +280,22 @@ impl Runtime {
             method = init_method;
             is_init = true;
         } else {
-            class = receiver.borrow().__class__();
-            method = if let Some(method) = class.borrow().resolve_method(method_name) {
-                method
-            } else if let Some(method) = self.builtins.Main.borrow().resolve_method(method_name) {
-                method
+            let receiver_is_class = self.is_class(&receiver);
+            if receiver_is_class {
+                class = receiver.clone();
             } else {
-                return Err(NoSuchMethod {
+                class = receiver.borrow().__class__();
+            }
+            method = self.resolve_method(&class, method_name).ok_or(NoSuchMethod {
+                class_name: class.borrow().__name__().unwrap(),
+                method_name: method_name.into(),
+            })?;
+            if receiver_is_class && !method.is_class_method {
+                return Err(NotAClassMethod {
                     class_name: class.borrow().__name__().unwrap(),
                     method_name: method_name.into(),
                 });
-            };
+            }
             is_init = false;
         }
         let arguments: Vec<ObjectRef> = arguments.into_iter().collect();
@@ -296,6 +341,16 @@ impl Runtime {
         }
     }
 
+    fn resolve_method(&mut self, class: &ObjectRef, method_name: &str) -> Option<MethodRef> {
+        if let Some(method) = class.borrow().resolve_method(method_name) {
+            return Some(method);
+        }
+        if let Some(method) = self.builtins.Main.borrow().resolve_method(method_name) {
+            return Some(method);
+        }
+        None
+    }
+
     fn is_class(&self, object: &ObjectRef) -> bool {
         object.borrow().__class__() == self.builtins.Class
     }
@@ -314,18 +369,20 @@ impl Runtime {
         Ok(retval)
     }
 
+    fn eval_expr_list(
+        &mut self,
+        exprs: impl IntoIterator<Item = Node<Expression>>,
+    ) -> Result<Vec<ObjectRef>> {
+        exprs.into_iter().map(|node| self.eval(node)).collect()
+    }
+
     fn eval_literal(&mut self, literal: Node<Literal>) -> Result<ObjectRef> {
         match literal.v {
             Literal::String(string) => Ok(self.create_string(string.v.value)),
             Literal::Number(number) => Ok(self.create_number(number.v.value)),
             Literal::Boolean(boolean) => Ok(self.create_bool(boolean.v.value)),
             Literal::Array(array) => {
-                let elements = array
-                    .v
-                    .elements
-                    .into_iter()
-                    .map(|node| self.eval(node))
-                    .collect::<Result<_, _>>()?;
+                let elements = self.eval_expr_list(array.v.elements)?;
                 Ok(self.create_array(elements))
             }
             Literal::Nil(_) => Ok(self.nil()),

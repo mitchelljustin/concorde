@@ -8,7 +8,7 @@ use crate::parse::Error::{IllegalLValue, RuleMismatch};
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
     ClassDefinition, Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition,
-    Next, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Program, Statement,
+    Next, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program, Statement,
     String as StringVariant, TopError, Unary, Variable, WhileLoop,
 };
 
@@ -85,7 +85,7 @@ impl SourceParser {
             .into_node(&pair)),
             Rule::for_in => {
                 let [binding, iterator, body] = pair.clone().into_inner().next_chunk().unwrap();
-                let binding = self.parse_variable(&binding)?;
+                let binding = self.parse_variable(binding)?;
                 let iterator = self.parse_expression(iterator)?;
                 let body = self.parse_block(body)?;
                 Ok(Statement::ForIn(
@@ -117,7 +117,15 @@ impl SourceParser {
     }
 
     fn parse_method_def(&mut self, pair: Pair<Rule>) -> Result<Node<MethodDefinition>> {
-        let [name, param_list, body] = pair.clone().into_inner().next_chunk().unwrap();
+        let mut inner = pair.clone().into_inner();
+        let first = inner.next().unwrap();
+        let is_class_method = first.as_rule() == Rule::class_method_spec;
+        let name = if is_class_method {
+            inner.next().unwrap()
+        } else {
+            first
+        };
+        let [param_list, body] = inner.next_chunk().unwrap();
         let name = self.parse_ident(&name)?;
         let parameters = self.parse_list(param_list, |s, pair| {
             Ok(Parameter {
@@ -127,6 +135,7 @@ impl SourceParser {
         })?;
         let body = self.parse_block(body)?;
         Ok(MethodDefinition {
+            is_class_method,
             name,
             body,
             parameters,
@@ -206,8 +215,13 @@ impl SourceParser {
                 let literal = self.parse_literal(pair.clone())?;
                 Ok(Expression::Literal(literal).into_node(&pair))
             }
-            Rule::variable => {
-                Ok(Expression::Variable(self.parse_variable(&pair)?).into_node(&pair))
+            Rule::path => {
+                let mut components = self.parse_list(pair.clone(), Self::parse_variable)?;
+                if components.len() == 1 {
+                    Ok(Expression::Variable(components.pop().unwrap()).into_node(&pair))
+                } else {
+                    Ok(Expression::Path(Path { components }.into_node(&pair)).into_node(&pair))
+                }
             }
             Rule::if_else => {
                 let mut inner = pair.clone().into_inner();
@@ -339,10 +353,10 @@ impl SourceParser {
         }
     }
 
-    fn parse_variable(&mut self, pair: &Pair<Rule>) -> Result<Node<Variable>> {
-        self.assert_rule(pair, Rule::variable)?;
+    fn parse_variable(&mut self, pair: Pair<Rule>) -> Result<Node<Variable>> {
+        self.assert_rule(&pair, Rule::variable)?;
         Ok(Variable {
-            ident: self.parse_ident(pair)?,
+            ident: self.parse_ident(&pair)?,
         }
         .into_node(&pair))
     }
