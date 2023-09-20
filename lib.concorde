@@ -2,15 +2,9 @@ use IO
 
 class Gerald
     def swag()
-        IO::print("pokey")
-    end
-
-    def self::yolo()
-        IO::print("gumby")
+        print("pokey")
     end
 end
 
-Gerald::yolo()
 g = Gerald()
 g.swag()
-IO::print(Main)

@@ -3,11 +3,12 @@ use std::ops::ControlFlow;
 
 use object::Primitive;
 
-use crate::runtime::bootstrap::{builtin, Builtins};
+use crate::runtime::bootstrap::Builtins;
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
 use crate::types::NodeMeta;
 
 mod bootstrap;
+mod builtin;
 mod interpret;
 mod object;
 
@@ -19,10 +20,10 @@ pub enum Error {
     DuplicateDefinition { class: ObjectRef, name: String },
     #[error("no such variable: '{name}': {node}")]
     NoSuchVariable { name: String, node: NodeMeta },
-    #[error("no such method: '{class_name}::{method_name}'")]
+    #[error("no such method '{search}': {node:#?}")]
     NoSuchMethod {
-        class_name: String,
-        method_name: String,
+        node: Option<NodeMeta>,
+        search: String,
     },
     #[error("not a class method: '{class_name}::{method_name}'")]
     NotAClassMethod {
@@ -63,6 +64,7 @@ pub struct StackFrame {
     receiver: Option<ObjectRef>,
     class: Option<ObjectRef>,
     method_name: Option<String>,
+    open_classes: Vec<ObjectRef>,
     variables: HashMap<String, ObjectRef>,
 }
 
@@ -76,7 +78,7 @@ impl Runtime {
     pub fn new() -> Self {
         let mut runtime = Self {
             all_objects: Vec::new(),
-            stack: Vec::from([StackFrame::default()]),
+            stack: Vec::new(),
             builtins: Builtins::default(),
         };
         runtime.bootstrap();

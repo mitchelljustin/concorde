@@ -1,15 +1,16 @@
 use std::ops::ControlFlow;
 
-use crate::runtime::bootstrap::builtin;
-use crate::runtime::object::{MethodBody, ObjectRef, Param};
+use crate::runtime::builtin;
+use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
 use crate::runtime::Error::{
-    ArityMismatch, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable, NotAClassMethod,
-    NotCallable, UndefinedProperty,
+    ArityMismatch, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable, NotCallable,
+    UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, Block, Expression, LValue, Literal, MethodDefinition, Node, Path, Program, Statement,
+    Access, Block, Call, Expression, LValue, Literal, MethodDefinition, Node, NodeMeta, Path,
+    Program, Statement,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -63,17 +64,22 @@ impl Runtime {
                             .borrow_mut()
                             .set_property(member.v.ident.v.name.clone(), value?);
                     }
-                    LValue::Index(index) => {
-                        let target = self.eval(*index.v.target)?;
-                        let index = self.eval(*index.v.index)?;
+                    LValue::Index(index_node) => {
+                        let target = self.eval(*index_node.v.target)?;
+                        let index = self.eval(*index_node.v.index)?;
                         let value = value?;
-                        self.perform_call(target, builtin::op::__set_index__, [index, value])?;
+                        self.call_instance_method(
+                            target,
+                            builtin::op::__set_index__,
+                            [index, value],
+                            Some(index_node.meta),
+                        )?;
                     }
                 }
             }
             Statement::ClassDefinition(class_def) => {
                 let class = self.create_simple_class(class_def.v.name.v.name);
-                self.stack.push(StackFrame {
+                self.push_stack_frame(StackFrame {
                     class: Some(class),
                     ..StackFrame::default()
                 });
@@ -84,13 +90,13 @@ impl Runtime {
                         break;
                     };
                 }
-                self.stack.pop();
+                self.pop_stack_frame();
                 return result;
             }
             Statement::ForIn(for_in) => {
                 let binding_name = for_in.v.binding.v.ident.v.name;
                 let iterator = self.eval(for_in.v.iterator)?;
-                self.stack.push(StackFrame::default());
+                self.push_stack_frame(StackFrame::default());
                 if iterator.borrow().__class__() != self.builtins.Array {
                     unimplemented!();
                 }
@@ -101,11 +107,11 @@ impl Runtime {
                     result = self.eval_block(for_in.v.body.clone()).map(|_| ());
                     handle_loop_control_flow!(result);
                 }
-                self.stack.pop();
+                self.pop_stack_frame();
                 return result;
             }
             Statement::WhileLoop(while_loop) => {
-                self.stack.push(StackFrame::default());
+                self.push_stack_frame(StackFrame::default());
                 let mut result = Ok(());
                 loop {
                     let condition = self.eval(while_loop.v.condition.clone())?;
@@ -119,9 +125,20 @@ impl Runtime {
             }
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
             Statement::Next(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
-            Statement::Use(_) => todo!(),
+            Statement::Use(use_stmt) => {
+                let class = self.resolve_class_from_path(use_stmt.v.path)?;
+                self.stack.last_mut().unwrap().open_classes.push(class);
+            }
         };
         Ok(())
+    }
+
+    fn pop_stack_frame(&mut self) -> Option<StackFrame> {
+        self.stack.pop()
+    }
+
+    fn push_stack_frame(&mut self, stack_frame: StackFrame) {
+        self.stack.push(stack_frame)
     }
 
     fn exec_method_def(
@@ -137,12 +154,9 @@ impl Runtime {
             .map(|param| Param::Positional(param.v.name.v.name.clone()))
             .collect();
         let body = MethodBody::User(method_def.v.body);
-        class.borrow_mut().define_method(
-            method_name,
-            params,
-            body,
-            method_def.v.is_class_method,
-        )?;
+        class
+            .borrow_mut()
+            .define_method(method_name, params, body)?;
         Ok(())
     }
 
@@ -155,22 +169,7 @@ impl Runtime {
                     node: var.meta,
                 })
             }
-            Expression::Call(call) => {
-                let target = call.v.target;
-                let (class_receiver, method_name) = match target.v {
-                    Expression::Variable(var) => (None, var.v.ident.v.name),
-                    Expression::Path(mut path) => {
-                        let method_component = path.v.components.pop().unwrap();
-                        let method_name = method_component.v.ident.v.name;
-                        let receiver = self.resolve_class_from_path(path)?;
-                        (Some(receiver), method_name)
-                    }
-                    _ => return Err(NotCallable { node: target.meta }),
-                };
-                let arguments = self.eval_expr_list(call.v.arguments)?;
-                let receiver = class_receiver.unwrap_or_else(|| self.current_receiver());
-                self.perform_call(receiver, &method_name, arguments)
-            }
+            Expression::Call(call) => self.eval_call_expr(call),
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
             Expression::IfElse(if_else) => {
@@ -188,20 +187,87 @@ impl Runtime {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&binary.v.op.v);
-                self.perform_call(lhs, method_name, [rhs])
+                self.call_instance_method(lhs, method_name, [rhs], Some(binary.meta))
             }
-            Expression::Index(index) => {
-                let target = self.eval(*index.v.target)?;
-                let index = self.eval(*index.v.index)?;
-                self.perform_call(target, builtin::op::__index__, [index])
+            Expression::Index(index_node) => {
+                let target = self.eval(*index_node.v.target)?;
+                let index = self.eval(*index_node.v.index)?;
+                self.call_instance_method(
+                    target,
+                    builtin::op::__index__,
+                    [index],
+                    Some(index_node.meta),
+                )
             }
             Expression::Unary(unary) => {
                 let rhs = self.eval(*unary.v.rhs)?;
                 let method_name = builtin::op::method_for_unary_op(&unary.v.op.v).unwrap();
-                self.perform_call(rhs, method_name, None)
+                self.call_instance_method(rhs, method_name, None, Some(unary.meta))
             }
             Expression::Path(path) => self.resolve_class_from_path(path),
         }
+    }
+
+    fn eval_call_expr(&mut self, call: Node<Call>) -> Result<ObjectRef> {
+        let target = call.v.target;
+        let receiver;
+        let method;
+        match target.v {
+            Expression::Variable(var) => {
+                let method_name = var.v.ident.v.name;
+                if let Some(class_var) = self.resolve_variable(&method_name) && self.is_class(&class_var) {
+                    receiver = class_var.clone();
+                    method = class_var.borrow().get_init_method();
+                } else {
+                    let open_classes_vec = &self.stack.last().unwrap().open_classes;
+                    let open_classes = open_classes_vec.iter();
+                    let current_receiver = self.current_receiver();
+                    let class = current_receiver.borrow().__class__();
+                    let mut search_classes = open_classes.chain([&self.builtins.Main, &class]).rev();
+                    let (found_class, found_method) = search_classes
+                        .find_map(|class| {
+                            let name = class.borrow().__name__();
+                            class
+                                .borrow()
+                                .resolve_own_method(&method_name)
+                                .map(|method| (class, method))
+                        })
+                        .ok_or(NoSuchMethod {
+                            node: Some(call.meta),
+                            search: method_name,
+                        })?;
+                    receiver = if found_class == &class {
+                        current_receiver
+                    } else {
+                        found_class.clone()
+                    };
+                    method = found_method;
+                }
+            }
+            Expression::Path(mut path) => {
+                let method_component = path.v.components.pop().unwrap();
+                let method_name = method_component.v.ident.v.name;
+                receiver = self.resolve_class_from_path(path)?;
+                if let Some(class) = receiver.borrow().get_property(&method_name) {
+                    method = class.borrow().get_init_method();
+                } else {
+                    method =
+                        receiver
+                            .borrow()
+                            .resolve_own_method(&method_name)
+                            .ok_or(NoSuchMethod {
+                                node: Some(call.meta),
+                                search: format!(
+                                    "{}::{method_name}",
+                                    receiver.borrow().__name__().unwrap()
+                                ),
+                            })?;
+                }
+            }
+            _ => return Err(NotCallable { node: target.meta }),
+        };
+        let arguments = self.eval_expr_list(call.v.arguments)?;
+        self.execute_method(receiver, method, arguments)
     }
 
     fn resolve_class_from_path(&self, path: Node<Path>) -> Result<ObjectRef> {
@@ -257,57 +323,20 @@ impl Runtime {
                     });
                 };
                 let method_name = &var.v.ident.v.name;
-                self.perform_call(target, method_name, arguments)
+                self.call_instance_method(target, method_name, arguments, Some(call.meta))
             }
             _ => unimplemented!(),
         }
     }
 
-    pub fn perform_call(
+    pub fn execute_method(
         &mut self,
-        mut receiver: ObjectRef,
-        method_name: &str,
+        receiver: ObjectRef,
+        method: MethodRef,
         arguments: impl IntoIterator<Item = ObjectRef>,
     ) -> Result<ObjectRef> {
-        let method;
-        let class;
-        let is_init;
-        if let Some(class_var) = self.resolve_variable(method_name) && self.is_class(&class_var) {
-            class = class_var;
-            receiver = self.create_object(class.clone());
-            let Some(init_method) = class.borrow().resolve_method(builtin::method::init) else {
-                let arg_count = arguments.into_iter().count();
-                if arg_count > 0 {
-                    return Err(ArityMismatch {
-                        method_name: builtin::method::init.into(),
-                        class_name: class.borrow().__name__().unwrap(),
-                        expected: 0,
-                        actual: arg_count,
-                    });
-                }
-                return Ok(receiver);
-            };
-            method = init_method;
-            is_init = true;
-        } else {
-            let receiver_is_class = self.is_class(&receiver);
-            if receiver_is_class {
-                class = receiver.clone();
-            } else {
-                class = receiver.borrow().__class__();
-            }
-            method = class.borrow().resolve_method(method_name).ok_or(NoSuchMethod {
-                class_name: class.borrow().__name__().unwrap(),
-                method_name: method_name.into(),
-            })?;
-            if receiver_is_class && !method.is_class_method {
-                return Err(NotAClassMethod {
-                    class_name: class.borrow().__name__().unwrap(),
-                    method_name: method_name.into(),
-                });
-            }
-            is_init = false;
-        }
+        let class = method.class.upgrade().expect("method's class was dropped");
+        let method_name = method.name.clone();
         let arguments: Vec<ObjectRef> = arguments.into_iter().collect();
         match &method.body {
             MethodBody::User(body) => {
@@ -316,7 +345,7 @@ impl Runtime {
                         expected: method.params.len(),
                         actual: arguments.len(),
                         class_name: class.borrow().__name__().unwrap(),
-                        method_name: method_name.into(),
+                        method_name,
                     });
                 }
                 let variables = method
@@ -325,30 +354,47 @@ impl Runtime {
                     .zip(arguments.into_iter())
                     .map(|(param, arg)| {
                         let Param::Positional(name) = param else {
-                            unimplemented!();
+                            todo!();
                         };
                         (name.clone(), arg)
                     })
                     .collect();
-                self.stack.push(StackFrame {
+                self.push_stack_frame(StackFrame {
                     receiver: Some(receiver.clone()),
-                    method_name: Some(method_name.into()),
+                    method_name: Some(method_name.clone()),
                     variables,
                     ..StackFrame::default()
                 });
                 let result = self.eval_block(body.clone());
-                self.stack.pop();
-                if is_init {
+                self.pop_stack_frame();
+                if method_name == builtin::method::init {
                     result?;
                     Ok(receiver)
                 } else {
                     result
                 }
             }
-            MethodBody::System(function) => {
-                function(self, receiver.clone(), method_name, arguments)
-            }
+            MethodBody::System(function) => function(self, receiver, method_name, arguments),
         }
+    }
+
+    pub fn call_instance_method(
+        &mut self,
+        receiver: ObjectRef,
+        method_name: &str,
+        arguments: impl IntoIterator<Item = ObjectRef>,
+        node: Option<NodeMeta>,
+    ) -> Result<ObjectRef> {
+        let class = receiver.borrow().__class__();
+        let class_name = class.borrow().__name__().unwrap();
+        let method = class
+            .borrow()
+            .resolve_own_method(method_name)
+            .ok_or(NoSuchMethod {
+                search: format!("{class_name}::{method_name}"),
+                node,
+            })?;
+        self.execute_method(receiver, method, arguments)
     }
 
     fn is_class(&self, object: &ObjectRef) -> bool {

@@ -2,81 +2,7 @@ use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
-use crate::runtime::Runtime;
-
-#[allow(non_upper_case_globals)]
-pub mod builtin {
-    pub const SELF: &str = "self";
-
-    pub mod class {
-        pub const Class: &str = "Class";
-        pub const Object: &str = "Object";
-        pub const String: &str = "String";
-        pub const NilClass: &str = "NilClass";
-        pub const Main: &str = "Main";
-        pub const IO: &str = "IO";
-        pub const Bool: &str = "Bool";
-        pub const Number: &str = "Number";
-        pub const Array: &str = "Array";
-    }
-
-    pub mod property {
-        pub const __name__: &str = "__name__";
-        pub const __class__: &str = "__class__";
-    }
-
-    pub mod method {
-        pub const init: &str = "init";
-        pub const to_s: &str = "to_s";
-    }
-
-    pub mod op {
-        use crate::types::Operator;
-
-        pub const __add__: &str = "__add__";
-        pub const __sub__: &str = "__sub__";
-        pub const __mul__: &str = "__mul__";
-        pub const __div__: &str = "__div__";
-        pub const __gt__: &str = "__gt__";
-        pub const __gte__: &str = "__gte__";
-        pub const __lt__: &str = "__lt__";
-        pub const __lte__: &str = "__lte__";
-        pub const __eq__: &str = "__eq__";
-        pub const __neq__: &str = "__neq__";
-        pub const __or__: &str = "__or__";
-        pub const __and__: &str = "__and__";
-        pub const __neg__: &str = "__neg__";
-        pub const __not__: &str = "__not__";
-        pub const __index__: &str = "__index__";
-        pub const __set_index__: &str = "__set_index__";
-
-        pub fn method_for_binary_op(op: &Operator) -> &str {
-            match op {
-                Operator::EqualEqual => __eq__,
-                Operator::NotEqual => __neq__,
-                Operator::Greater => __gt__,
-                Operator::GreaterEqual => __gte__,
-                Operator::Less => __lt__,
-                Operator::LessEqual => __lte__,
-                Operator::Plus => __add__,
-                Operator::Minus => __sub__,
-                Operator::Star => __mul__,
-                Operator::Slash => __div__,
-                Operator::LogicalAnd => __and__,
-                Operator::LogicalOr => __or__,
-                Operator::LogicalNot => __not__,
-            }
-        }
-
-        pub fn method_for_unary_op(op: &Operator) -> Option<&str> {
-            match op {
-                Operator::Minus => Some(__neg__),
-                Operator::LogicalNot => Some(__not__),
-                _ => None,
-            }
-        }
-    }
-}
+use crate::runtime::{builtin, Runtime, StackFrame};
 
 macro define_builtins(
     $Builtins:ident {
@@ -136,7 +62,6 @@ macro define_system_methods(
                     };
                     Ok($body)
                 }),
-                false
             ).unwrap();
         )+
     }
@@ -165,6 +90,7 @@ impl Runtime {
     }
 
     fn bootstrap_classes_and_objects(&mut self) {
+        self.stack.push(StackFrame::default());
         self.builtins.Class = Object::new_dummy();
         let Class = self.builtins.Class.clone();
         Class.borrow_mut().class = Some(Class.clone());
@@ -218,10 +144,7 @@ impl Runtime {
 
         // create main
         self.builtins.Main = self.create_simple_class(builtin::class::Main.into());
-        let main = self.create_object(self.builtins.Main.clone());
-        let root_frame = &mut self.stack[0];
-        root_frame.receiver = Some(main);
-        root_frame.class = Some(self.builtins.Main.clone());
+        self.stack[0].class = Some(self.builtins.Main.clone());
 
         self.builtins.IO = self.create_simple_class(builtin::class::IO.into());
     }
@@ -417,10 +340,11 @@ impl Runtime {
                     .into_iter()
                     .map(|object|
                         runtime
-                            .perform_call(
+                            .call_instance_method(
                                 object,
                                 builtin::method::to_s,
-                                vec![],
+                                None,
+                                None,
                             )
                             .map(|string| string.borrow().string().unwrap().to_string()))
                     .collect::<Result<Vec<String>, _>>()?;
@@ -492,7 +416,8 @@ impl Runtime {
                 MethodBody::System(|runtime, _this, _method_name, args| {
                     let arg_count = args.len();
                     for (i, arg) in args.into_iter().enumerate() {
-                        let string_obj = runtime.perform_call(arg, builtin::method::to_s, None)?;
+                        let string_obj =
+                            runtime.call_instance_method(arg, builtin::method::to_s, None, None)?;
                         print!("{}", string_obj.borrow().string().unwrap());
                         if i < arg_count - 1 {
                             print!(" ");
@@ -501,7 +426,6 @@ impl Runtime {
                     println!();
                     Ok(runtime.nil())
                 }),
-                true,
             )
             .unwrap();
     }

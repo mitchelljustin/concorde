@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
-use crate::runtime::bootstrap::builtin;
+use crate::runtime::builtin;
 use crate::runtime::Error::DuplicateDefinition;
 use crate::runtime::{Result, Runtime};
 use crate::types::{Block, Node};
@@ -15,7 +15,7 @@ pub type MethodRef = Rc<Method>;
 pub type SystemMethod = fn(
     runtime: &mut Runtime,
     this: ObjectRef,
-    method_name: &str,
+    method_name: String,
     arguments: Vec<ObjectRef>,
 ) -> Result<ObjectRef>;
 
@@ -45,7 +45,6 @@ pub struct Method {
     pub class: WeakObjectRef,
     pub params: Vec<Param>,
     pub body: MethodBody,
-    pub is_class_method: bool,
 }
 
 pub struct Object {
@@ -85,11 +84,25 @@ impl Object {
             .__name__()
             .unwrap_or(DEFAULT_NAME.into());
         let ptr = self.weak_self.as_ptr();
-        format!("#<{} {:p}>", class_name, ptr).into()
+        format!("#<{} {:p}>", class_name, ptr)
     }
 
     pub fn __class__(&self) -> ObjectRef {
         self.class.as_ref().unwrap().clone()
+    }
+
+    pub fn get_init_method(&self) -> MethodRef {
+        self.resolve_own_method(builtin::method::init)
+            .unwrap_or_else(|| {
+                Rc::new(Method {
+                    class: self.weak_self(),
+                    name: builtin::method::init.into(),
+                    body: MethodBody::System(|runtime, class, _, _| {
+                        Ok(runtime.create_object(class))
+                    }),
+                    params: Vec::new(),
+                })
+            })
     }
 
     pub fn number(&self) -> Option<f64> {
@@ -141,7 +154,6 @@ impl Object {
         method_name: String,
         params: Vec<Param>,
         body: MethodBody,
-        is_class_method: bool,
     ) -> Result<()> {
         if self.methods.contains_key(&method_name) {
             return Err(DuplicateDefinition {
@@ -154,18 +166,17 @@ impl Object {
             class: self.weak_self.clone(),
             params,
             body,
-            is_class_method,
         };
         self.methods.insert(method_name, Rc::new(method));
         Ok(())
     }
 
-    pub fn resolve_method(&self, name: &str) -> Option<MethodRef> {
+    pub fn resolve_own_method(&self, name: &str) -> Option<MethodRef> {
         if let Some(method) = self.methods.get(name) {
             return Some(method.clone());
         };
         if let Some(superclass) = self.superclass.as_ref() {
-            return superclass.borrow().resolve_method(name);
+            return superclass.borrow().resolve_own_method(name);
         }
         None
     }
