@@ -144,7 +144,9 @@ impl Runtime {
 
         // create main
         self.builtins.Main = self.create_simple_class(builtin::class::Main.into());
-        self.stack[0].class = Some(self.builtins.Main.clone());
+        let root_frame = &mut self.stack[0];
+        root_frame.class = Some(self.builtins.Main.clone());
+        root_frame.open_classes.push(self.builtins.Main.clone());
 
         self.builtins.IO = self.create_simple_class(builtin::class::IO.into());
     }

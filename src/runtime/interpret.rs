@@ -219,29 +219,38 @@ impl Runtime {
                     receiver = class_var.clone();
                     method = class_var.borrow().get_init_method();
                 } else {
-                    let open_classes_vec = &self.stack.last().unwrap().open_classes;
-                    let open_classes = open_classes_vec.iter();
-                    let current_receiver = self.current_receiver();
-                    let class = current_receiver.borrow().__class__();
-                    let mut search_classes = open_classes.chain([&self.builtins.Main, &class]).rev();
-                    let (found_class, found_method) = search_classes
-                        .find_map(|class| {
-                            let name = class.borrow().__name__();
-                            class
+                    if let Some((current_receiver, instance_method)) = self
+                        .current_receiver()
+                        .map(|receiver|
+                            receiver
+                                .borrow()
+                                .__class__()
                                 .borrow()
                                 .resolve_own_method(&method_name)
-                                .map(|method| (class, method))
-                        })
-                        .ok_or(NoSuchMethod {
-                            node: Some(call.meta),
-                            search: method_name,
-                        })?;
-                    receiver = if found_class == &class {
-                        current_receiver
+                                .map(|method| (receiver.clone(), method)))
+                        .flatten() {
+                        receiver = current_receiver;
+                        method = instance_method;
                     } else {
-                        found_class.clone()
-                    };
-                    method = found_method;
+                        let mut search_classes = self.stack
+                            .iter()
+                            .map(|frame| frame.open_classes.iter())
+                            .flatten()
+                            .rev();
+                        let (found_class, found_method) = search_classes
+                            .find_map(|class| {
+                                class
+                                    .borrow()
+                                    .resolve_own_method(&method_name)
+                                    .map(|method| (class, method))
+                            })
+                            .ok_or(NoSuchMethod {
+                                node: call.meta.into(),
+                                search: method_name,
+                            })?;
+                        receiver = found_class.clone();
+                        method = found_method;
+                    }
                 }
             }
             Expression::Path(mut path) => {
@@ -256,7 +265,7 @@ impl Runtime {
                             .borrow()
                             .resolve_own_method(&method_name)
                             .ok_or(NoSuchMethod {
-                                node: Some(call.meta),
+                                node: call.meta.into(),
                                 search: format!(
                                     "{}::{method_name}",
                                     receiver.borrow().__name__().unwrap()
@@ -392,7 +401,7 @@ impl Runtime {
             .resolve_own_method(method_name)
             .ok_or(NoSuchMethod {
                 search: format!("{class_name}::{method_name}"),
-                node,
+                node: node.into(),
             })?;
         self.execute_method(receiver, method, arguments)
     }

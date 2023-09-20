@@ -1,10 +1,5 @@
-use IO
-
-class Gerald
-    def swag()
-        print("pokey")
-    end
+def pront()
+    IO::print("PRONT")
 end
 
-g = Gerald()
-g.swag()
+pront()

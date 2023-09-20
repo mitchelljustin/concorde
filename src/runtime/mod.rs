@@ -5,7 +5,7 @@ use object::Primitive;
 
 use crate::runtime::bootstrap::Builtins;
 use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
-use crate::types::NodeMeta;
+use crate::types::{MaybeNodeMeta, NodeMeta};
 
 mod bootstrap;
 mod builtin;
@@ -20,11 +20,8 @@ pub enum Error {
     DuplicateDefinition { class: ObjectRef, name: String },
     #[error("no such variable: '{name}': {node}")]
     NoSuchVariable { name: String, node: NodeMeta },
-    #[error("no such method '{search}': {node:#?}")]
-    NoSuchMethod {
-        node: Option<NodeMeta>,
-        search: String,
-    },
+    #[error("no such method '{search}': {node}")]
+    NoSuchMethod { node: MaybeNodeMeta, search: String },
     #[error("not a class method: '{class_name}::{method_name}'")]
     NotAClassMethod {
         class_name: String,
@@ -100,10 +97,9 @@ impl Runtime {
             .expect("no class")
     }
 
-    fn current_receiver(&self) -> ObjectRef {
+    fn current_receiver(&self) -> Option<ObjectRef> {
         self.find_closest_in_stack(|frame| frame.receiver.as_ref())
             .cloned()
-            .expect("no receiver")
     }
 
     pub fn create_string(&mut self, value: String) -> ObjectRef {
@@ -169,7 +165,7 @@ impl Runtime {
 
     pub fn resolve_variable(&self, name: &str) -> Option<ObjectRef> {
         if name == builtin::SELF {
-            return Some(self.current_receiver());
+            return self.current_receiver();
         }
         self.find_closest_in_stack(|frame| frame.variables.get(name))
             .cloned()

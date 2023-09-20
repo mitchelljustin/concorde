@@ -24,6 +24,30 @@ pub struct NodeMeta {
     pub line_col: (usize, usize),
 }
 
+#[derive(Debug, Clone)]
+pub struct MaybeNodeMeta(Option<NodeMeta>);
+
+impl Display for MaybeNodeMeta {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Some(node) => write!(f, "{node}"),
+            None => write!(f, "(no AST)"),
+        }
+    }
+}
+
+impl From<NodeMeta> for MaybeNodeMeta {
+    fn from(value: NodeMeta) -> Self {
+        Some(value).into()
+    }
+}
+
+impl From<Option<NodeMeta>> for MaybeNodeMeta {
+    fn from(value: Option<NodeMeta>) -> Self {
+        Self(value)
+    }
+}
+
 impl Display for NodeMeta {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let NodeMeta {
