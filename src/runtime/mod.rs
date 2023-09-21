@@ -58,13 +58,14 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Default, Debug)]
 pub struct StackFrame {
-    receiver: Option<ObjectRef>,
+    instance: Option<ObjectRef>,
     class: Option<ObjectRef>,
     method_name: Option<String>,
     open_classes: Vec<ObjectRef>,
     variables: HashMap<String, ObjectRef>,
 }
 
+#[derive(Default)]
 pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
     builtins: Builtins,
@@ -73,11 +74,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new() -> Self {
-        let mut runtime = Self {
-            all_objects: Vec::new(),
-            stack: Vec::new(),
-            builtins: Builtins::default(),
-        };
+        let mut runtime = Self::default();
         runtime.bootstrap();
         runtime
     }
@@ -97,8 +94,8 @@ impl Runtime {
             .expect("no class")
     }
 
-    fn current_receiver(&self) -> Option<ObjectRef> {
-        self.find_closest_in_stack(|frame| frame.receiver.as_ref())
+    fn current_instance(&self) -> Option<ObjectRef> {
+        self.find_closest_in_stack(|frame| frame.instance.as_ref())
             .cloned()
     }
 
@@ -165,7 +162,7 @@ impl Runtime {
 
     pub fn resolve_variable(&self, name: &str) -> Option<ObjectRef> {
         if name == builtin::SELF {
-            return self.current_receiver();
+            return self.current_instance();
         }
         self.find_closest_in_stack(|frame| frame.variables.get(name))
             .cloned()

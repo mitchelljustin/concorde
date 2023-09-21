@@ -420,7 +420,11 @@ impl Runtime {
                     for (i, arg) in args.into_iter().enumerate() {
                         let string_obj =
                             runtime.call_instance_method(arg, builtin::method::to_s, None, None)?;
-                        print!("{}", string_obj.borrow().string().unwrap());
+                        let string = string_obj.borrow().string().ok_or(TypeError {
+                            class: string_obj.borrow().__class__().borrow().__name__().unwrap(),
+                            expected: builtin::class::String.into(),
+                        })?;
+                        print!("{}", string);
                         if i < arg_count - 1 {
                             print!(" ");
                         }

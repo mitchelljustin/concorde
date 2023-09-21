@@ -220,7 +220,7 @@ impl Runtime {
                     method = class_var.borrow().get_init_method();
                 } else {
                     if let Some((current_receiver, instance_method)) = self
-                        .current_receiver()
+                        .current_instance()
                         .map(|receiver|
                             receiver
                                 .borrow()
@@ -369,7 +369,7 @@ impl Runtime {
                     })
                     .collect();
                 self.push_stack_frame(StackFrame {
-                    receiver: Some(receiver.clone()),
+                    instance: Some(receiver.clone()),
                     method_name: Some(method_name.clone()),
                     variables,
                     ..StackFrame::default()

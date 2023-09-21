@@ -1,5 +1,10 @@
-def pront()
-    IO::print("PRONT")
+use IO
+
+class Gerald
+
+    def self::pront()
+        print("PRONT")
+    end
 end
 
-pront()
+Gerald::pront()
