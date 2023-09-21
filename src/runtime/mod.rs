@@ -4,7 +4,7 @@ use std::ops::ControlFlow;
 use object::Primitive;
 
 use crate::runtime::bootstrap::Builtins;
-use crate::runtime::object::{Object, ObjectRef, WeakObjectRef};
+use crate::runtime::object::{MethodRef, Object, ObjectRef, WeakObjectRef};
 use crate::types::{MaybeNodeMeta, NodeMeta};
 
 mod bootstrap;
@@ -66,7 +66,7 @@ pub struct StackFrame {
     id: usize,
     instance: Option<ObjectRef>,
     class: Option<ObjectRef>,
-    method_name: Option<String>,
+    method: Option<MethodRef>,
     open_classes: Vec<ObjectRef>,
     variables: HashMap<String, ObjectRef>,
 }

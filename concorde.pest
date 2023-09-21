@@ -21,7 +21,7 @@ stmt = {
     method_def |
     class_def |
     loop_break |
-    loop_next |
+    loop_continue |
     for_in |
     while_loop |
     use_stmt |
@@ -59,7 +59,7 @@ class_def = {
 }
 
 loop_break = { "break" }
-loop_next = { "next" }
+loop_continue = { "continue" }
 
 param_list = {
     ("(" ~ ")") |
@@ -100,7 +100,7 @@ comparison = {
 }
 
 op_comparison = _{
-    op_gt | op_gte | op_lt | op_lte
+    op_gte | op_lte | op_gt | op_lt
 }
 
 term = {
@@ -223,7 +223,7 @@ KEYWORD = @{
     "or" |
     "not" |
     "break" |
-    "next"
+    "continue"
 }
 
 ident = @{

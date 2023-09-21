@@ -154,7 +154,7 @@ impl Runtime {
                 return result;
             }
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
-            Statement::Next(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
+            Statement::Continue(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
             Statement::Use(use_stmt) => {
                 let class = self.resolve_class_from_path(use_stmt.v.path)?;
                 self.stack.last_mut().unwrap().open_classes.push(class);
@@ -395,6 +395,7 @@ impl Runtime {
                         method_name,
                     });
                 }
+                let is_init = method_name == builtin::method::init;
                 let variables = method
                     .params
                     .iter()
@@ -406,17 +407,22 @@ impl Runtime {
                         (name.clone(), arg)
                     })
                     .collect();
+                let instance = if is_init {
+                    self.create_object(method.class.upgrade().unwrap())
+                } else {
+                    receiver.clone()
+                };
                 let stack_id = self.push_stack_frame(StackFrame {
-                    instance: Some(receiver.clone()),
-                    method_name: Some(method_name.clone()),
+                    instance: Some(instance.clone()),
+                    method: Some(method.clone()),
                     variables,
                     ..StackFrame::default()
                 });
                 let result = self.eval_block(body.clone());
                 self.pop_stack_frame(stack_id);
-                if method_name == builtin::method::init {
+                if is_init {
                     result?;
-                    Ok(receiver)
+                    Ok(instance)
                 } else {
                     result
                 }
@@ -433,6 +439,7 @@ impl Runtime {
         node: Option<NodeMeta>,
     ) -> Result<ObjectRef> {
         let class = receiver.borrow().__class__();
+        let number = receiver.borrow().number();
         let class_name = class.borrow().__name__().unwrap();
         let method = class
             .borrow()

@@ -1,3 +1,25 @@
-for i in [1, 2, 3]
+class Range
+    def init(start, finish)
+        self.start = start
+        self.finish = finish
+    end
+
+    def iter()
+        self
+    end
+
+    def next()
+        if self.start >= self.finish
+            nil
+        else
+            i = self.start
+            self.start = self.start + 1
+            i
+        end
+    end
+end
+
+range = Range(1, 100)
+for i in range
     IO::print(i)
 end

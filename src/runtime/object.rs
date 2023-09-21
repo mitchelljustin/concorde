@@ -106,28 +106,28 @@ impl Object {
     }
 
     pub fn number(&self) -> Option<f64> {
-        let Primitive::Number(value) = self.primitive.clone().unwrap() else {
+        let Some(Primitive::Number(value)) = self.primitive.clone() else {
             return None;
         };
         Some(value)
     }
 
     pub fn string(&self) -> Option<String> {
-        let Primitive::String(value) = self.primitive.clone().unwrap() else {
+        let Some(Primitive::String(value)) = self.primitive.clone() else {
             return None;
         };
         Some(value)
     }
 
     pub fn bool(&self) -> Option<bool> {
-        let Primitive::Boolean(value) = self.primitive.clone().unwrap() else {
+        let Some(Primitive::Boolean(value)) = self.primitive.clone() else {
             return None;
         };
         Some(value)
     }
 
     pub fn array(&self) -> Option<Vec<ObjectRef>> {
-        let Primitive::Array(value) = self.primitive.clone().unwrap() else {
+        let Some(Primitive::Array(value)) = self.primitive.clone() else {
             return None;
         };
         Some(value)
