@@ -10,16 +10,17 @@ class Range
 
     def next()
         if self.start >= self.finish
-            nil
-        else
-            i = self.start
-            self.start = self.start + 1
-            i
+            return nil
         end
+        i = self.start
+        self.start = self.start + 1
+        i
     end
 end
 
-range = Range(1, 100)
+range = Range(0, 100)
+n = 0
 for i in range
-    IO::print(i)
+    n = n + i
+    IO::print(i, n)
 end

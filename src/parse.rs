@@ -9,7 +9,7 @@ use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
     ClassDefinition, Continue, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
     MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program,
-    Statement, StringLit, TopError, Unary, Use, Variable, WhileLoop,
+    Return, Statement, StringLit, TopError, Unary, Use, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -110,6 +110,15 @@ impl SourceParser {
             Rule::loop_break => Ok(Statement::Break(Break {}.into_node(&pair)).into_node(&pair)),
             Rule::loop_continue => {
                 Ok(Statement::Continue(Continue {}.into_node(&pair)).into_node(&pair))
+            }
+            Rule::return_stmt => {
+                let retval = pair
+                    .clone()
+                    .into_inner()
+                    .next()
+                    .map(|pair| self.parse_expression(pair))
+                    .transpose()?;
+                Ok(Statement::Return(Return { retval }.into_node(&pair)).into_node(&pair))
             }
             Rule::expr => {
                 Ok(Statement::Expression(self.parse_expression(pair.clone())?).into_node(&pair))

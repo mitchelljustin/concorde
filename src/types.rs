@@ -132,6 +132,9 @@ define_node_types! {
     Break {}
     Continue {}
     Nil {}
+    Return {
+        retval: Option<Node<Expression>>,
+    }
     WhileLoop {
         condition: Node<Expression>,
         body: Node<Block>,
@@ -195,6 +198,7 @@ define_collector_enums! {
         WhileLoop,
         Break,
         Continue,
+        Return,
         Assignment,
         Expression,
         MethodDefinition,

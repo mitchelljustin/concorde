@@ -4,7 +4,7 @@ use crate::runtime::builtin;
 use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
 use crate::runtime::Error::{
     ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable,
-    NotCallable, UndefinedProperty,
+    NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -158,6 +158,17 @@ impl Runtime {
             Statement::Use(use_stmt) => {
                 let class = self.resolve_class_from_path(use_stmt.v.path)?;
                 self.stack.last_mut().unwrap().open_classes.push(class);
+            }
+            Statement::Return(return_stmt) => {
+                let retval = return_stmt
+                    .v
+                    .retval
+                    .map(|retval| self.eval(retval))
+                    .transpose()?;
+                return Err(ReturnFromMethod {
+                    retval,
+                    node: return_stmt.meta,
+                });
             }
         };
         Ok(())
@@ -421,10 +432,22 @@ impl Runtime {
                 let result = self.eval_block(body.clone());
                 self.pop_stack_frame(stack_id);
                 if is_init {
-                    result?;
+                    match result {
+                        Err(ReturnFromMethod { retval: None, .. }) => {}
+                        Err(ReturnFromMethod { node, .. }) => {
+                            return Err(ReturnFromInitializer { node });
+                        }
+                        Err(error) => return Err(error),
+                        Ok(_) => {}
+                    }
                     Ok(instance)
                 } else {
-                    result
+                    match result {
+                        Err(ReturnFromMethod { retval, .. }) => {
+                            Ok(retval.unwrap_or(self.builtins.nil.clone()))
+                        }
+                        other => other,
+                    }
                 }
             }
             MethodBody::System(function) => function(self, receiver, method_name, arguments),

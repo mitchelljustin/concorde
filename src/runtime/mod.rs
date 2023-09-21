@@ -16,6 +16,13 @@ mod object;
 pub enum Error {
     #[error("control flow")]
     ControlFlow(ControlFlow<()>),
+    #[error("illegal return outside of function: {node}")]
+    ReturnFromMethod {
+        retval: Option<ObjectRef>,
+        node: NodeMeta,
+    },
+    #[error("illegal return of value inside initializer: {node}")]
+    ReturnFromInitializer { node: NodeMeta },
     #[error("duplicate definition of method '{name}'")]
     DuplicateDefinition { class: ObjectRef, name: String },
     #[error("no such variable: '{name}': {node}")]
