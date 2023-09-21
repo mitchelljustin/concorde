@@ -9,8 +9,8 @@ use crate::runtime::Error::{
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, Block, Call, Expression, LValue, Literal, MethodDefinition, Node, NodeMeta, Path,
-    Program, Statement,
+    Access, Assignment, Block, Call, Expression, ForIn, LValue, Literal, MethodDefinition, Node,
+    NodeMeta, Path, Program, Statement,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -47,79 +47,7 @@ impl Runtime {
             Statement::MethodDefinition(method_def) => {
                 self.exec_method_def(self.current_class(), method_def)?;
             }
-            Statement::Assignment(assignment) => {
-                let mut value = self.eval(assignment.v.value);
-                let method_name = builtin::op::method_for_assignment_op(&assignment.v.op.v);
-                match assignment.v.target.v {
-                    LValue::Variable(var) => {
-                        let name = var.v.ident.v.name.clone();
-                        if let Some(method_name) = method_name {
-                            let lhs = self.resolve_variable(&name).ok_or(NoSuchVariable {
-                                name: name.clone(),
-                                node: var.meta,
-                            })?;
-                            value = self.call_instance_method(
-                                lhs,
-                                method_name,
-                                Some(value?),
-                                Some(assignment.meta),
-                            );
-                        }
-                        self.assign_variable(name, value?);
-                    }
-                    LValue::Access(access) => {
-                        let target = self.eval(*access.v.target)?;
-                        let Expression::Variable(member) = access.v.member.v else {
-                            return Err(IllegalAssignmentTarget {
-                                access: access.meta,
-                            });
-                        };
-                        let member = member.v.ident.v.name.clone();
-                        if let Some(method_name) = method_name {
-                            let lhs =
-                                target
-                                    .borrow()
-                                    .get_property(&member)
-                                    .ok_or(NoSuchProperty {
-                                        name: member.clone(),
-                                        node: assignment.meta.clone(),
-                                    })?;
-                            value = self.call_instance_method(
-                                lhs,
-                                method_name,
-                                Some(value?),
-                                Some(assignment.meta),
-                            );
-                        }
-                        target.borrow_mut().set_property(member, value?);
-                    }
-                    LValue::Index(index_node) => {
-                        let target = self.eval(*index_node.v.target)?;
-                        let index = self.eval(*index_node.v.index)?;
-                        if let Some(method_name) = method_name {
-                            let lhs = self.call_instance_method(
-                                target.clone(),
-                                builtin::op::__index__,
-                                [index.clone()],
-                                Some(index_node.meta.clone()),
-                            )?;
-                            value = self.call_instance_method(
-                                lhs,
-                                method_name,
-                                Some(value?),
-                                Some(assignment.meta),
-                            );
-                        }
-                        let value = value?;
-                        self.call_instance_method(
-                            target,
-                            builtin::op::__set_index__,
-                            [index, value],
-                            Some(index_node.meta),
-                        )?;
-                    }
-                }
-            }
+            Statement::Assignment(assignment) => return self.exec_assignment(assignment),
             Statement::ClassDefinition(class_def) => {
                 let class = self.create_simple_class(class_def.v.name.v.name);
                 let stack_id = self.push_stack_frame(StackFrame {
@@ -136,53 +64,7 @@ impl Runtime {
                 self.pop_stack_frame(stack_id);
                 return result;
             }
-            Statement::ForIn(for_in) => {
-                let binding_name = for_in.v.binding.v.ident.v.name;
-                let iterator_node = for_in.v.iterable.meta.clone();
-                let iterable = self.eval(for_in.v.iterable)?;
-                let iterable_class = iterable.borrow().__class__();
-                let Some(iter_method) = iterable_class
-                    .borrow()
-                    .resolve_own_method(builtin::method::iter)
-                else {
-                    return Err(BadIterator {
-                        node: iterator_node,
-                        reason: "iterable has no .iter() method",
-                    });
-                };
-                let iterator = self.call_method(iterable, iter_method, None)?;
-                let Some(next_method) = iterator
-                    .borrow()
-                    .__class__()
-                    .borrow()
-                    .resolve_own_method(builtin::method::next)
-                else {
-                    return Err(BadIterator {
-                        node: iterator_node,
-                        reason: "iterator has no .next() method",
-                    });
-                };
-
-                let stack_id = self.push_stack_frame(StackFrame::default());
-                let mut result = Ok(());
-                loop {
-                    let item = match self.call_method(iterator.clone(), next_method.clone(), None) {
-                        Ok(item) => item,
-                        Err(error) => {
-                            result = Err(error);
-                            break;
-                        }
-                    };
-                    if item == self.builtins.nil {
-                        break;
-                    }
-                    self.define_variable(binding_name.clone(), item);
-                    result = self.eval_block(for_in.v.body.clone()).map(|_| ());
-                    handle_loop_control_flow!(result);
-                }
-                self.pop_stack_frame(stack_id);
-                return result;
-            }
+            Statement::ForIn(for_in) => return self.exec_for_in(for_in),
             Statement::WhileLoop(while_loop) => {
                 self.push_stack_frame(StackFrame::default());
                 let mut result = Ok(());
@@ -214,6 +96,128 @@ impl Runtime {
                 });
             }
         };
+        Ok(())
+    }
+
+    fn exec_for_in(&mut self, for_in: Node<ForIn>) -> Result<()> {
+        let binding_name = for_in.v.binding.v.ident.v.name;
+        let iterator_node = for_in.v.iterable.meta.clone();
+        let iterable = self.eval(for_in.v.iterable)?;
+        let iterable_class = iterable.borrow().__class__();
+        let Some(iter_method) = iterable_class
+            .borrow()
+            .resolve_own_method(builtin::method::iter)
+        else {
+            return Err(BadIterator {
+                node: iterator_node,
+                reason: "iterable has no .iter() method",
+            });
+        };
+        let iterator = self.call_method(iterable, iter_method, None)?;
+        let Some(next_method) = iterator
+            .borrow()
+            .__class__()
+            .borrow()
+            .resolve_own_method(builtin::method::next)
+        else {
+            return Err(BadIterator {
+                node: iterator_node,
+                reason: "iterator has no .next() method",
+            });
+        };
+
+        let stack_id = self.push_stack_frame(StackFrame::default());
+        let mut result = Ok(());
+        loop {
+            let item = match self.call_method(iterator.clone(), next_method.clone(), None) {
+                Ok(item) => item,
+                Err(error) => {
+                    result = Err(error);
+                    break;
+                }
+            };
+            if item == self.builtins.nil {
+                break;
+            }
+            self.define_variable(binding_name.clone(), item);
+            result = self.eval_block(for_in.v.body.clone()).map(|_| ());
+            handle_loop_control_flow!(result);
+        }
+        self.pop_stack_frame(stack_id);
+        return result;
+    }
+
+    fn exec_assignment(&mut self, assignment: Node<Assignment>) -> Result<()> {
+        let mut value = self.eval(assignment.v.value);
+        let method_name = builtin::op::method_for_assignment_op(&assignment.v.op.v);
+        match assignment.v.target.v {
+            LValue::Variable(var) => {
+                let name = var.v.ident.v.name.clone();
+                if let Some(method_name) = method_name {
+                    let lhs = self.resolve_variable(&name).ok_or(NoSuchVariable {
+                        name: name.clone(),
+                        node: var.meta,
+                    })?;
+                    value = self.call_instance_method(
+                        lhs,
+                        method_name,
+                        Some(value?),
+                        Some(assignment.meta),
+                    );
+                }
+                self.assign_variable(name, value?);
+            }
+            LValue::Access(access) => {
+                let target = self.eval(*access.v.target)?;
+                let Expression::Variable(member) = access.v.member.v else {
+                    return Err(IllegalAssignmentTarget {
+                        access: access.meta,
+                    });
+                };
+                let member = member.v.ident.v.name.clone();
+                if let Some(method_name) = method_name {
+                    let lhs = target
+                        .borrow()
+                        .get_property(&member)
+                        .ok_or(NoSuchProperty {
+                            name: member.clone(),
+                            node: assignment.meta.clone(),
+                        })?;
+                    value = self.call_instance_method(
+                        lhs,
+                        method_name,
+                        Some(value?),
+                        Some(assignment.meta),
+                    );
+                }
+                target.borrow_mut().set_property(member, value?);
+            }
+            LValue::Index(index_node) => {
+                let target = self.eval(*index_node.v.target)?;
+                let index = self.eval(*index_node.v.index)?;
+                if let Some(method_name) = method_name {
+                    let lhs = self.call_instance_method(
+                        target.clone(),
+                        builtin::op::__index__,
+                        [index.clone()],
+                        Some(index_node.meta.clone()),
+                    )?;
+                    value = self.call_instance_method(
+                        lhs,
+                        method_name,
+                        Some(value?),
+                        Some(assignment.meta),
+                    );
+                }
+                let value = value?;
+                self.call_instance_method(
+                    target,
+                    builtin::op::__set_index__,
+                    [index, value],
+                    Some(index_node.meta),
+                )?;
+            }
+        }
         Ok(())
     }
 
