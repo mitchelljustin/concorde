@@ -53,13 +53,17 @@ pub enum Error {
     #[error("bad path contains non-class '{non_class}': {path}")]
     BadPath { non_class: String, path: NodeMeta },
     #[error("bad iterator, {reason}: {node}")]
-    BadIterator { reason: &'static str, node: NodeMeta },
+    BadIterator {
+        reason: &'static str,
+        node: NodeMeta,
+    },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Default, Debug)]
 pub struct StackFrame {
+    id: usize,
     instance: Option<ObjectRef>,
     class: Option<ObjectRef>,
     method_name: Option<String>,
@@ -72,6 +76,7 @@ pub struct Runtime {
     all_objects: Vec<WeakObjectRef>,
     builtins: Builtins,
     stack: Vec<StackFrame>,
+    stack_id: usize,
 }
 
 impl Runtime {

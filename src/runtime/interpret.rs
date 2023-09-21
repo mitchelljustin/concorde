@@ -79,7 +79,7 @@ impl Runtime {
             }
             Statement::ClassDefinition(class_def) => {
                 let class = self.create_simple_class(class_def.v.name.v.name);
-                self.push_stack_frame(StackFrame {
+                let stack_id = self.push_stack_frame(StackFrame {
                     class: Some(class),
                     ..StackFrame::default()
                 });
@@ -90,7 +90,7 @@ impl Runtime {
                         break;
                     };
                 }
-                self.pop_stack_frame();
+                self.pop_stack_frame(stack_id);
                 return result;
             }
             Statement::ForIn(for_in) => {
@@ -120,7 +120,7 @@ impl Runtime {
                     });
                 };
 
-                self.push_stack_frame(StackFrame::default());
+                let stack_id = self.push_stack_frame(StackFrame::default());
                 let mut result = Ok(());
                 loop {
                     let item = match self.call_method(iterator.clone(), next_method.clone(), None) {
@@ -137,7 +137,7 @@ impl Runtime {
                     result = self.eval_block(for_in.v.body.clone()).map(|_| ());
                     handle_loop_control_flow!(result);
                 }
-                self.pop_stack_frame();
+                self.pop_stack_frame(stack_id);
                 return result;
             }
             Statement::WhileLoop(while_loop) => {
@@ -163,12 +163,20 @@ impl Runtime {
         Ok(())
     }
 
-    fn pop_stack_frame(&mut self) -> Option<StackFrame> {
-        self.stack.pop()
+    fn pop_stack_frame(&mut self, stack_id: usize) {
+        let stack_frame = self.stack.pop().unwrap();
+        debug_assert_eq!(
+            stack_frame.id, stack_id,
+            "popping a different stack frame than was pushed"
+        );
     }
 
-    fn push_stack_frame(&mut self, stack_frame: StackFrame) {
-        self.stack.push(stack_frame)
+    fn push_stack_frame(&mut self, mut stack_frame: StackFrame) -> usize {
+        let stack_id = self.stack_id;
+        self.stack_id += 1;
+        stack_frame.id = stack_id;
+        self.stack.push(stack_frame);
+        stack_id
     }
 
     fn exec_method_def(
@@ -398,14 +406,14 @@ impl Runtime {
                         (name.clone(), arg)
                     })
                     .collect();
-                self.push_stack_frame(StackFrame {
+                let stack_id = self.push_stack_frame(StackFrame {
                     instance: Some(receiver.clone()),
                     method_name: Some(method_name.clone()),
                     variables,
                     ..StackFrame::default()
                 });
                 let result = self.eval_block(body.clone());
-                self.pop_stack_frame();
+                self.pop_stack_frame(stack_id);
                 if method_name == builtin::method::init {
                     result?;
                     Ok(receiver)
