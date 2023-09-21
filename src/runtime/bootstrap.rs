@@ -75,6 +75,7 @@ define_builtins!(Builtins {
     Bool,
     Number,
     Array,
+    ArrayIter,
     IO,
     Main,
     bool_true,
@@ -125,6 +126,7 @@ impl Runtime {
 
         // create Array
         self.builtins.Array = self.create_simple_class(builtin::class::Array.into());
+        self.builtins.ArrayIter = self.create_simple_class(builtin::class::ArrayIter.into());
 
         // create booleans
         self.builtins.Bool = self.create_simple_class(builtin::class::Bool.into());
@@ -399,6 +401,32 @@ impl Runtime {
                 elements.pop().ok_or(IndexError {
                     error: "pop from empty list",
                 })?
+            }
+
+            fn iter() {
+                let iter = runtime.create_object(runtime.builtins.ArrayIter.clone());
+                iter.borrow_mut().set_property("array".into(), this.clone());
+                iter.borrow_mut().set_property("index".into(), runtime.create_number(0.0));
+                iter
+            }
+        );
+
+        define_system_methods!(
+            [class=self.builtins.ArrayIter, runtime=runtime, method_name=method_name, this=this]
+            fn next() {
+                let index_obj = this.borrow().get_property("index").unwrap();
+                let index = index_obj.borrow().number().unwrap() as usize;
+                let array = this.borrow().get_property("array").unwrap();
+                let item = runtime.call_instance_method(
+                    array,
+                    builtin::op::__index__,
+                    Some(index_obj),
+                    None,
+                )?;
+                if item != runtime.builtins.nil {
+                    this.borrow_mut().set_property("index".into(), runtime.create_number((index + 1) as f64));
+                }
+                item
             }
         );
 

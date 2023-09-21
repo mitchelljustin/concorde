@@ -52,6 +52,8 @@ pub enum Error {
     TypeError { expected: String, class: String },
     #[error("bad path contains non-class '{non_class}': {path}")]
     BadPath { non_class: String, path: NodeMeta },
+    #[error("bad iterator, {reason}: {node}")]
+    BadIterator { reason: &'static str, node: NodeMeta },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;

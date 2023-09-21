@@ -84,14 +84,14 @@ impl SourceParser {
             )
             .into_node(&pair)),
             Rule::for_in => {
-                let [binding, iterator, body] = pair.clone().into_inner().next_chunk().unwrap();
+                let [binding, iterable, body] = pair.clone().into_inner().next_chunk().unwrap();
                 let binding = self.parse_variable(binding)?;
-                let iterator = self.parse_expression(iterator)?;
+                let iterable = self.parse_expression(iterable)?;
                 let body = self.parse_block(body)?;
                 Ok(Statement::ForIn(
                     ForIn {
                         binding,
-                        iterator,
+                        iterable,
                         body,
                     }
                     .into_node(&pair),

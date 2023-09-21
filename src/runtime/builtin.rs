@@ -12,6 +12,7 @@ pub mod class {
     pub const Bool: &str = "Bool";
     pub const Number: &str = "Number";
     pub const Array: &str = "Array";
+    pub const ArrayIter: &str = "ArrayIter";
 }
 
 pub mod property {
@@ -22,6 +23,8 @@ pub mod property {
 pub mod method {
     pub const init: &str = "init";
     pub const to_s: &str = "to_s";
+    pub const iter: &str = "iter";
+    pub const next: &str = "next";
 }
 
 pub mod op {

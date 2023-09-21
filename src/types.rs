@@ -126,7 +126,7 @@ define_node_types! {
     }
     ForIn {
         binding: Node<Variable>,
-        iterator: Node<Expression>,
+        iterable: Node<Expression>,
         body: Node<Block>,
     }
     Break {}

@@ -3,8 +3,8 @@ use std::ops::ControlFlow;
 use crate::runtime::builtin;
 use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
 use crate::runtime::Error::{
-    ArityMismatch, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable, NotCallable,
-    UndefinedProperty,
+    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable,
+    NotCallable, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -95,15 +95,45 @@ impl Runtime {
             }
             Statement::ForIn(for_in) => {
                 let binding_name = for_in.v.binding.v.ident.v.name;
-                let iterator = self.eval(for_in.v.iterator)?;
+                let iterator_node = for_in.v.iterable.meta.clone();
+                let iterable = self.eval(for_in.v.iterable)?;
+                let iterable_class = iterable.borrow().__class__();
+                let Some(iter_method) = iterable_class
+                    .borrow()
+                    .resolve_own_method(builtin::method::iter)
+                else {
+                    return Err(BadIterator {
+                        node: iterator_node,
+                        reason: "iterable has no .iter() method",
+                    });
+                };
+                let iterator = self.call_method(iterable, iter_method, None)?;
+                let Some(next_method) = iterator
+                    .borrow()
+                    .__class__()
+                    .borrow()
+                    .resolve_own_method(builtin::method::next)
+                else {
+                    return Err(BadIterator {
+                        node: iterator_node,
+                        reason: "iterator has no .next() method",
+                    });
+                };
+
                 self.push_stack_frame(StackFrame::default());
-                if iterator.borrow().__class__() != self.builtins.Array {
-                    unimplemented!();
-                }
-                let elements = iterator.borrow().array().unwrap();
                 let mut result = Ok(());
-                for element in elements {
-                    self.define_variable(binding_name.clone(), element);
+                loop {
+                    let item = match self.call_method(iterator.clone(), next_method.clone(), None) {
+                        Ok(item) => item,
+                        Err(error) => {
+                            result = Err(error);
+                            break;
+                        }
+                    };
+                    if item == self.builtins.nil {
+                        break;
+                    }
+                    self.define_variable(binding_name.clone(), item);
                     result = self.eval_block(for_in.v.body.clone()).map(|_| ());
                     handle_loop_control_flow!(result);
                 }
@@ -276,7 +306,7 @@ impl Runtime {
             _ => return Err(NotCallable { node: target.meta }),
         };
         let arguments = self.eval_expr_list(call.v.arguments)?;
-        self.execute_method(receiver, method, arguments)
+        self.call_method(receiver, method, arguments)
     }
 
     fn resolve_class_from_path(&self, path: Node<Path>) -> Result<ObjectRef> {
@@ -338,7 +368,7 @@ impl Runtime {
         }
     }
 
-    pub fn execute_method(
+    pub fn call_method(
         &mut self,
         receiver: ObjectRef,
         method: MethodRef,
@@ -403,7 +433,7 @@ impl Runtime {
                 search: format!("{class_name}::{method_name}"),
                 node: node.into(),
             })?;
-        self.execute_method(receiver, method, arguments)
+        self.call_method(receiver, method, arguments)
     }
 
     fn is_class(&self, object: &ObjectRef) -> bool {
