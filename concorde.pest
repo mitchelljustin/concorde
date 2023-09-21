@@ -73,7 +73,11 @@ param = {
 }
 
 assignment = {
-    lvalue ~ "=" ~ expr
+    lvalue ~ op_assignment ~ expr
+}
+
+op_assignment = _{
+    op_eq | op_plus_eq | op_minus_eq | op_star_eq | op_slash_eq
 }
 
 expr = {
@@ -94,7 +98,7 @@ equality = {
 }
 
 op_equality = _{
-    op_eq | op_neq
+    op_eq_eq | op_neq
 }
 
 comparison = {
@@ -129,7 +133,8 @@ index = {
     access ~ ("[" ~ expr ~ "]")*
 }
 
-op_eq = { "==" }
+op_eq = { "=" }
+op_eq_eq = { "==" }
 op_neq = { "!=" }
 op_gt = { ">" }
 op_gte = { ">=" }
@@ -139,6 +144,10 @@ op_minus = { "-" }
 op_plus = { "+" }
 op_star = { "*" }
 op_slash = { "/" }
+op_minus_eq = { "-=" }
+op_plus_eq = { "+=" }
+op_star_eq = { "*=" }
+op_slash_eq = { "/=" }
 op_not = { "not" }
 op_or = { "or" }
 op_and = { "and" }

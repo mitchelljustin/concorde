@@ -3,8 +3,8 @@ use std::ops::ControlFlow;
 use crate::runtime::builtin;
 use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
 use crate::runtime::Error::{
-    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchVariable,
-    NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
+    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchProperty,
+    NoSuchVariable, NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -48,10 +48,24 @@ impl Runtime {
                 self.exec_method_def(self.current_class(), method_def)?;
             }
             Statement::Assignment(assignment) => {
-                let value = self.eval(assignment.v.value);
+                let mut value = self.eval(assignment.v.value);
+                let method_name = builtin::op::method_for_assignment_op(&assignment.v.op.v);
                 match assignment.v.target.v {
                     LValue::Variable(var) => {
-                        self.assign_variable(var.v.ident.v.name.clone(), value?);
+                        let name = var.v.ident.v.name.clone();
+                        if let Some(method_name) = method_name {
+                            let lhs = self.resolve_variable(&name).ok_or(NoSuchVariable {
+                                name: name.clone(),
+                                node: var.meta,
+                            })?;
+                            value = self.call_instance_method(
+                                lhs,
+                                method_name,
+                                Some(value?),
+                                Some(assignment.meta),
+                            );
+                        }
+                        self.assign_variable(name, value?);
                     }
                     LValue::Access(access) => {
                         let target = self.eval(*access.v.target)?;
@@ -60,13 +74,42 @@ impl Runtime {
                                 access: access.meta,
                             });
                         };
-                        target
-                            .borrow_mut()
-                            .set_property(member.v.ident.v.name.clone(), value?);
+                        let member = member.v.ident.v.name.clone();
+                        if let Some(method_name) = method_name {
+                            let lhs =
+                                target
+                                    .borrow()
+                                    .get_property(&member)
+                                    .ok_or(NoSuchProperty {
+                                        name: member.clone(),
+                                        node: assignment.meta.clone(),
+                                    })?;
+                            value = self.call_instance_method(
+                                lhs,
+                                method_name,
+                                Some(value?),
+                                Some(assignment.meta),
+                            );
+                        }
+                        target.borrow_mut().set_property(member, value?);
                     }
                     LValue::Index(index_node) => {
                         let target = self.eval(*index_node.v.target)?;
                         let index = self.eval(*index_node.v.index)?;
+                        if let Some(method_name) = method_name {
+                            let lhs = self.call_instance_method(
+                                target.clone(),
+                                builtin::op::__index__,
+                                [index.clone()],
+                                Some(index_node.meta.clone()),
+                            )?;
+                            value = self.call_instance_method(
+                                lhs,
+                                method_name,
+                                Some(value?),
+                                Some(assignment.meta),
+                            );
+                        }
                         let value = value?;
                         self.call_instance_method(
                             target,
@@ -235,7 +278,7 @@ impl Runtime {
             Expression::Binary(binary) => {
                 let lhs = self.eval(*binary.v.lhs)?;
                 let rhs = self.eval(*binary.v.rhs)?;
-                let method_name = builtin::op::method_for_binary_op(&binary.v.op.v);
+                let method_name = builtin::op::method_for_binary_op(&binary.v.op.v).unwrap();
                 self.call_instance_method(lhs, method_name, [rhs], Some(binary.meta))
             }
             Expression::Index(index_node) => {
@@ -462,7 +505,6 @@ impl Runtime {
         node: Option<NodeMeta>,
     ) -> Result<ObjectRef> {
         let class = receiver.borrow().__class__();
-        let number = receiver.borrow().number();
         let class_name = class.borrow().__name__().unwrap();
         let method = class
             .borrow()

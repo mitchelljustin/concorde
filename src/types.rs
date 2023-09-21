@@ -80,6 +80,7 @@ pub trait NodeVariant: Sized + Debug + Clone {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Operator {
+    Equal,
     EqualEqual,
     NotEqual,
     Greater,
@@ -90,6 +91,10 @@ pub enum Operator {
     Minus,
     Star,
     Slash,
+    PlusEqual,
+    MinusEqual,
+    StarEqual,
+    SlashEqual,
     LogicalAnd,
     LogicalOr,
     LogicalNot,
@@ -154,6 +159,7 @@ define_node_types! {
     }
     Assignment {
         target: Node<LValue>,
+        op: Node<Operator>,
         value: Node<Expression>,
     }
     Index {

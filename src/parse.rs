@@ -62,11 +62,12 @@ impl SourceParser {
         match pair.as_rule() {
             Rule::stmt => self.parse_statement(pair.into_inner().next().unwrap()),
             Rule::assignment => {
-                let [target, value] = pair.clone().into_inner().next_chunk().unwrap();
+                let [target, op, value] = pair.clone().into_inner().next_chunk().unwrap();
                 let target = self.parse_lvalue(target)?;
+                let op = self.parse_operator(&op);
                 let value = self.parse_expression(value)?;
                 Ok(
-                    Statement::Assignment(Assignment { target, value }.into_node(&pair))
+                    Statement::Assignment(Assignment { target, op, value }.into_node(&pair))
                         .into_node(&pair),
                 )
             }
@@ -162,7 +163,8 @@ impl SourceParser {
 
     fn parse_operator(&mut self, pair: &Pair<Rule>) -> Node<Operator> {
         match pair.as_rule() {
-            Rule::op_eq => Operator::EqualEqual,
+            Rule::op_eq => Operator::Equal,
+            Rule::op_eq_eq => Operator::EqualEqual,
             Rule::op_neq => Operator::NotEqual,
             Rule::op_gt => Operator::Greater,
             Rule::op_gte => Operator::GreaterEqual,
@@ -172,6 +174,10 @@ impl SourceParser {
             Rule::op_plus => Operator::Plus,
             Rule::op_star => Operator::Star,
             Rule::op_slash => Operator::Slash,
+            Rule::op_minus_eq => Operator::MinusEqual,
+            Rule::op_plus_eq => Operator::PlusEqual,
+            Rule::op_star_eq => Operator::StarEqual,
+            Rule::op_slash_eq => Operator::SlashEqual,
             Rule::op_not => Operator::LogicalNot,
             Rule::op_or => Operator::LogicalOr,
             Rule::op_and => Operator::LogicalAnd,

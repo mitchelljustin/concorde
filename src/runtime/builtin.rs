@@ -47,8 +47,18 @@ pub mod op {
     pub const __index__: &str = "__index__";
     pub const __set_index__: &str = "__set_index__";
 
-    pub fn method_for_binary_op(op: &Operator) -> &str {
-        match op {
+    pub fn method_for_assignment_op(op: &Operator) -> Option<&str> {
+        Some(match op {
+            Operator::PlusEqual => __add__,
+            Operator::MinusEqual => __sub__,
+            Operator::StarEqual => __mul__,
+            Operator::SlashEqual => __div__,
+            _ => return None,
+        })
+    }
+
+    pub fn method_for_binary_op(op: &Operator) -> Option<&str> {
+        Some(match op {
             Operator::EqualEqual => __eq__,
             Operator::NotEqual => __neq__,
             Operator::Greater => __gt__,
@@ -62,14 +72,15 @@ pub mod op {
             Operator::LogicalAnd => __and__,
             Operator::LogicalOr => __or__,
             Operator::LogicalNot => __not__,
-        }
+            _ => return None,
+        })
     }
 
     pub fn method_for_unary_op(op: &Operator) -> Option<&str> {
-        match op {
-            Operator::Minus => Some(__neg__),
-            Operator::LogicalNot => Some(__not__),
-            _ => None,
-        }
+        Some(match op {
+            Operator::Minus => __neg__,
+            Operator::LogicalNot => __not__,
+            _ => return None,
+        })
     }
 }

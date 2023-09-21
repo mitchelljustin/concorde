@@ -25,8 +25,10 @@ pub enum Error {
     ReturnFromInitializer { node: NodeMeta },
     #[error("duplicate definition of method '{name}'")]
     DuplicateDefinition { class: ObjectRef, name: String },
-    #[error("no such variable: '{name}': {node}")]
+    #[error("no such variable '{name}': {node}")]
     NoSuchVariable { name: String, node: NodeMeta },
+    #[error("no such property '{name}': {node}")]
+    NoSuchProperty { name: String, node: NodeMeta },
     #[error("no such method '{search}': {node}")]
     NoSuchMethod { node: MaybeNodeMeta, search: String },
     #[error("not a class method: '{class_name}::{method_name}'")]
