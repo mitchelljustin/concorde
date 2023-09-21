@@ -272,15 +272,14 @@ impl Runtime {
                 }
 
                 fn __add__(other) {
-                    if other.borrow().__class__() != runtime.builtins.String {
-                        return Err(TypeError {
-                            expected: builtin::class::String.into(),
-                            class: other.borrow().__class__().borrow().__name__().unwrap(),
-                        });
-                    }
+                    let other_string =  runtime.call_instance_method(
+                        other.clone(),
+                        builtin::method::to_s,
+                        None,
+                        None,
+                    )?.borrow().string().unwrap();
                     let mut me = this.borrow().string().unwrap();
-                    let other = other.borrow().string().unwrap();
-                    let result = me.add(&other);
+                    let result = me.add(&other_string);
                     runtime.create_string(result)
                 }
 

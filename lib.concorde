@@ -21,8 +21,8 @@ end
 use IO
 n = 0
 s = ""
-for i in Range(0, 100)
+for i in Range(0, 10000)
     n += i
-    s += "swag" + i.to_s()
+    s += "swag(" + i + ")"
     print(i, n, s)
 end
