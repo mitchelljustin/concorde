@@ -150,7 +150,6 @@ impl Runtime {
                 Some(_) => None,
             })
             .collect();
-        let delete_count = to_delete.len();
         for key in to_delete {
             self.strings.remove(&key);
         }

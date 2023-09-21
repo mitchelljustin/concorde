@@ -36,35 +36,41 @@ macro replace_expr($_t:tt $sub:expr) {
 macro count($($tts:tt)*) {0usize $(+ replace_expr!($tts 1usize))*}
 
 macro define_system_methods(
-    [class = $class:expr, runtime = $runtime:ident, method_name=$method_name:ident, this = $this:ident]
+    [runtime=$runtime:ident, method_name=$method_name:ident, this=$this:ident]
     $(
-        fn $name:ident($($param:ident),*) $body:tt
+        impl $class:expr => {
+            $(
+                fn $name:ident($($param:ident),*) $body:tt
+            )*
+        }
     )+
 ) {
-    {
-        let mut class_mut = $class.borrow_mut();
-        $(
-            let params = vec![$(
-                Param::Positional(stringify!($param).into()),
-            )*];
-            class_mut.define_method(
-                stringify!($name).into(),
-                params,
-                MethodBody::System(|$runtime, $this, $method_name, args| {
-                    let arg_count = args.len();
-                    let Ok([$($param,)*]) = <[ObjectRef; count!($($param)*)]>::try_from(args) else {
-                        return Err(ArityMismatch {
-                            class_name: $this.borrow().__class__().borrow().__name__().unwrap(),
-                            method_name: $method_name.into(),
-                            expected: count!($($param)*),
-                            actual: arg_count,
-                        });
-                    };
-                    Ok($body)
-                }),
-            ).unwrap();
-        )+
-    }
+    $(
+        {
+            let mut class_mut = $class.borrow_mut();
+            $(
+                let params = vec![$(
+                    Param::Positional(stringify!($param).into()),
+                )*];
+                class_mut.define_method(
+                    stringify!($name).into(),
+                    params,
+                    MethodBody::System(|$runtime, $this, $method_name, args| {
+                        let arg_count = args.len();
+                        let Ok([$($param,)*]) = <[ObjectRef; count!($($param)*)]>::try_from(args) else {
+                            return Err(ArityMismatch {
+                                class_name: $this.borrow().__class__().borrow().__name__().unwrap(),
+                                method_name: $method_name.into(),
+                                expected: count!($($param)*),
+                                actual: arg_count,
+                            });
+                        };
+                        Ok($body)
+                    }),
+                ).unwrap();
+            )+
+        }
+    )+
 }
 
 define_builtins!(Builtins {
@@ -155,270 +161,266 @@ impl Runtime {
 
     fn bootstrap_stdlib(&mut self) {
         define_system_methods!(
-            [class=self.builtins.Number, runtime=runtime, method_name=method_name, this=this]
-            fn init() {
-                this.borrow_mut().set_primitive(Primitive::Number(Default::default()));
-                this
-            }
+            [runtime=runtime, method_name=method_name, this=this]
 
-            fn __eq__(other) {
-                let result = this.borrow().number().unwrap() == other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+            impl self.builtins.Number => {
+                fn init() {
+                    this.borrow_mut().set_primitive(Primitive::Number(Default::default()));
+                    this
+                }
 
-            fn __neq__(other) {
-                let result = this.borrow().number().unwrap() != other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+                fn __eq__(other) {
+                    let result = this.borrow().number().unwrap() == other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __lt__(other) {
-                let result = this.borrow().number().unwrap() < other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+                fn __neq__(other) {
+                    let result = this.borrow().number().unwrap() != other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __lte__(other) {
-                let result = this.borrow().number().unwrap() <= other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+                fn __lt__(other) {
+                    let result = this.borrow().number().unwrap() < other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __gt__(other) {
-                let result = this.borrow().number().unwrap() > other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+                fn __lte__(other) {
+                    let result = this.borrow().number().unwrap() <= other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __gte__(other) {
-                let result = this.borrow().number().unwrap() >= other.borrow().number().unwrap();
-                runtime.create_bool(result)
-            }
+                fn __gt__(other) {
+                    let result = this.borrow().number().unwrap() > other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __add__(other) {
-                let result = this.borrow().number().unwrap() + other.borrow().number().unwrap();
-                runtime.create_number(result)
-            }
+                fn __gte__(other) {
+                    let result = this.borrow().number().unwrap() >= other.borrow().number().unwrap();
+                    runtime.create_bool(result)
+                }
 
-            fn __sub__(other) {
-                let result = this.borrow().number().unwrap() - other.borrow().number().unwrap();
-                runtime.create_number(result)
-            }
+                fn __add__(other) {
+                    let result = this.borrow().number().unwrap() + other.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
 
-            fn __mul__(other) {
-                let result = this.borrow().number().unwrap() * other.borrow().number().unwrap();
-                runtime.create_number(result)
-            }
+                fn __sub__(other) {
+                    let result = this.borrow().number().unwrap() - other.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
 
-            fn __div__(other) {
-                let result = this.borrow().number().unwrap() / other.borrow().number().unwrap();
-                runtime.create_number(result)
-            }
+                fn __mul__(other) {
+                    let result = this.borrow().number().unwrap() * other.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
 
-            fn __neg__() {
-                let result = - this.borrow().number().unwrap();
-                runtime.create_number(result)
-            }
+                fn __div__(other) {
+                    let result = this.borrow().number().unwrap() / other.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
 
-            fn round() {
-                let result = this.borrow().number().unwrap().round();
-                runtime.create_number(result)
-            }
+                fn __neg__() {
+                    let result = - this.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
 
-            fn ceil() {
-                let result = this.borrow().number().unwrap().ceil();
-                runtime.create_number(result)
-            }
+                fn round() {
+                    let result = this.borrow().number().unwrap().round();
+                    runtime.create_number(result)
+                }
 
-            fn floor() {
-                let result = this.borrow().number().unwrap().floor();
-                runtime.create_number(result)
-            }
+                fn ceil() {
+                    let result = this.borrow().number().unwrap().ceil();
+                    runtime.create_number(result)
+                }
 
-            fn pow(power) {
-                let power = power.borrow().number().unwrap();
-                let result = this.borrow().number().unwrap().powf(power);
-                runtime.create_number(result)
-            }
+                fn floor() {
+                    let result = this.borrow().number().unwrap().floor();
+                    runtime.create_number(result)
+                }
 
-            fn to_s() {
-                runtime.create_string(this.borrow().number().unwrap().to_string())
-            }
-        );
-        define_system_methods!(
-            [class=self.builtins.String, runtime=runtime, method_name=method_name, this=this]
-            fn init() {
-                this.borrow_mut().set_primitive(Primitive::String("".into()));
-                this
-            }
+                fn pow(power) {
+                    let power = power.borrow().number().unwrap();
+                    let result = this.borrow().number().unwrap().powf(power);
+                    runtime.create_number(result)
+                }
 
-            fn trim() {
-                let string = this.borrow().string().unwrap();
-                let result = string.trim();
-                runtime.create_string(result)
+                fn to_s() {
+                    runtime.create_string(this.borrow().number().unwrap().to_string())
+                }
             }
+            impl self.builtins.String => {
+                fn init() {
+                    this.borrow_mut().set_primitive(Primitive::String("".into()));
+                    this
+                }
 
-            fn __eq__(other) {
-                let result = this.borrow().string().unwrap() == other.borrow().string().unwrap();
-                runtime.create_bool(result)
+                fn trim() {
+                    let string = this.borrow().string().unwrap();
+                    let result = string.trim();
+                    runtime.create_string(result)
+                }
+
+                fn __eq__(other) {
+                    let result = this.borrow().string().unwrap() == other.borrow().string().unwrap();
+                    runtime.create_bool(result)
+                }
+
+                fn __neq__(other) {
+                    let result = this.borrow().string().unwrap() != other.borrow().string().unwrap();
+                    runtime.create_bool(result)
+                }
+
+                fn __add__(other) {
+                    if other.borrow().__class__() != runtime.builtins.String {
+                        return Err(TypeError {
+                            expected: builtin::class::String.into(),
+                            class: other.borrow().__class__().borrow().__name__().unwrap(),
+                        });
+                    }
+                    let mut me = this.borrow().string().unwrap();
+                    let other = other.borrow().string().unwrap();
+                    let result = me.add(&other);
+                    runtime.create_string(result)
+                }
+
+                fn to_s() {
+                    this
+                }
             }
+            impl self.builtins.Object => {
+                fn __debug__() {
+                    runtime.create_string(this.borrow().__debug__())
+                }
 
-            fn __neq__(other) {
-                let result = this.borrow().string().unwrap() != other.borrow().string().unwrap();
-                runtime.create_bool(result)
+                fn to_s() {
+                    runtime.create_string("Object()")
+                }
             }
-
-            fn __add__(other) {
-                if other.borrow().__class__() != runtime.builtins.String {
-                    return Err(TypeError {
-                        expected: builtin::class::String.into(),
-                        class: other.borrow().__class__().borrow().__name__().unwrap(),
+            impl self.builtins.NilClass => {
+                fn init() {
+                    return Err(IllegalConstructorCall {
+                        class: this.borrow().__class__().borrow().__name__().unwrap(),
                     });
                 }
-                let mut me = this.borrow().string().unwrap();
-                let other = other.borrow().string().unwrap();
-                let result = me.add(&other);
-                runtime.create_string(result)
-            }
 
-            fn to_s() {
-                this
+                fn to_s() {
+                    runtime.create_string("nil")
+                }
             }
-        );
-        define_system_methods!(
-            [class=self.builtins.Object, runtime=runtime, method_name=method_name, this=this]
-            fn __debug__() {
-                runtime.create_string(this.borrow().__debug__())
-            }
+            impl self.builtins.Bool => {
+                fn __not__() {
+                    if this == runtime.builtins.bool_false {
+                        runtime.builtins.bool_true.clone()
+                    } else {
+                        runtime.builtins.bool_false.clone()
+                    }
+                }
 
-            fn to_s() {
-                runtime.create_string("Object()")
-            }
-        );
-        define_system_methods!(
-            [class=self.builtins.NilClass, runtime=runtime, method_name=method_name, this=this]
-            fn init() {
-                return Err(IllegalConstructorCall {
-                    class: this.borrow().__class__().borrow().__name__().unwrap(),
-                });
-            }
+                fn init() {
+                    this.borrow_mut().set_primitive(Primitive::Boolean(Default::default()));
+                    this
+                }
 
-            fn to_s() {
-                runtime.create_string("nil")
+                fn to_s() {
+                    runtime.create_string(this.borrow().bool().unwrap().to_string())
+                }
             }
-        );
-        define_system_methods!(
-            [class=self.builtins.Bool, runtime=runtime, method_name=method_name, this=this]
-            fn __not__() {
-                if this == runtime.builtins.bool_false {
-                    runtime.builtins.bool_true.clone()
-                } else {
-                    runtime.builtins.bool_false.clone()
+            impl self.builtins.Array => {
+                fn to_s() {
+                    let elements = this.borrow().array().unwrap();
+                    let strings = elements
+                        .into_iter()
+                        .map(|object|
+                            runtime
+                                .call_instance_method(
+                                    object,
+                                    builtin::method::to_s,
+                                    None,
+                                    None,
+                                )
+                                .map(|string| string.borrow().string().unwrap().to_string()))
+                        .collect::<Result<Vec<String>, _>>()?;
+                    let inner = strings.join(", ");
+                    runtime.create_string(format!("[{inner}]"))
+                }
+
+                fn __index__(index) {
+                    if index.borrow().__class__() != runtime.builtins.Number {
+                        return Err(TypeError {
+                            class: index.borrow().__class__().borrow().__name__().unwrap(),
+                            expected: builtin::class::Number.into(),
+                        });
+                    }
+                    let elements = this.borrow().array().unwrap();
+                    if elements.len() == 0 {
+                        return Ok(runtime.nil());
+                    }
+                    let index = index.borrow().number().unwrap() as isize;
+                    let index = if index < 0 {
+                        index.rem_euclid(elements.len() as isize)
+                    } else {
+                        index
+                    } as usize;
+                    if index >= elements.len() {
+                        return Ok(runtime.nil());
+                    }
+                    elements[index].clone()
+                }
+
+                fn init() {
+                    this.borrow_mut().set_primitive(Primitive::Array(Default::default()));
+                    this
+                }
+
+                fn push(element) {
+                    let mut this_ref = this.borrow_mut();
+                    let mut elements = this_ref.array().unwrap();
+                    elements.push(element);
+                    this_ref.set_primitive(Primitive::Array(elements));
+                    runtime.nil()
+                }
+
+                fn pop() {
+                    let mut this_ref = this.borrow_mut();
+                    let mut elements = this_ref.array().unwrap();
+                    let element = elements.pop().ok_or(IndexError {
+                        error: "pop from empty list",
+                    })?;
+                    this_ref.set_primitive(Primitive::Array(elements));
+                    element
+                }
+
+                fn iter() {
+                    let iter = runtime.create_object(runtime.builtins.ArrayIter.clone());
+                    iter.borrow_mut().set_property("array".into(), this.clone());
+                    iter.borrow_mut().set_property("index".into(), runtime.create_number(0.0));
+                    iter
                 }
             }
 
-            fn init() {
-                this.borrow_mut().set_primitive(Primitive::Boolean(Default::default()));
-                this
-            }
-
-            fn to_s() {
-                runtime.create_string(this.borrow().bool().unwrap().to_string())
-            }
-        );
-        define_system_methods!(
-            [class=self.builtins.Array, runtime=runtime, method_name=method_name, this=this]
-            fn to_s() {
-                let elements = this.borrow().array().unwrap();
-                let strings = elements
-                    .into_iter()
-                    .map(|object|
-                        runtime
-                            .call_instance_method(
-                                object,
-                                builtin::method::to_s,
-                                None,
-                                None,
-                            )
-                            .map(|string| string.borrow().string().unwrap().to_string()))
-                    .collect::<Result<Vec<String>, _>>()?;
-                let inner = strings.join(", ");
-                runtime.create_string(format!("[{inner}]"))
-            }
-
-            fn __index__(index) {
-                if index.borrow().__class__() != runtime.builtins.Number {
-                    return Err(TypeError {
-                        class: index.borrow().__class__().borrow().__name__().unwrap(),
-                        expected: builtin::class::Number.into(),
-                    });
+            impl self.builtins.ArrayIter => {
+                fn next() {
+                    let index_obj = this.borrow().get_property("index").unwrap();
+                    let index = index_obj.borrow().number().unwrap() as usize;
+                    let array = this.borrow().get_property("array").unwrap();
+                    let item = runtime.call_instance_method(
+                        array,
+                        builtin::op::__index__,
+                        Some(index_obj),
+                        None,
+                    )?;
+                    if item != runtime.builtins.nil {
+                        this.borrow_mut().set_property("index".into(), runtime.create_number((index + 1) as f64));
+                    }
+                    item
                 }
-                let elements = this.borrow().array().unwrap();
-                if elements.len() == 0 {
-                    return Ok(runtime.nil());
+            }
+
+            impl self.builtins.Class => {
+                fn to_s() {
+                    runtime.create_string(this.borrow().__name__().unwrap())
                 }
-                let index = index.borrow().number().unwrap() as isize;
-                let index = if index < 0 {
-                    index.rem_euclid(elements.len() as isize)
-                } else {
-                    index
-                } as usize;
-                if index >= elements.len() {
-                    return Ok(runtime.nil());
-                }
-                elements[index].clone()
-            }
-
-            fn init() {
-                this.borrow_mut().set_primitive(Primitive::Array(Default::default()));
-                this
-            }
-
-            fn push(element) {
-                let mut this_ref = this.borrow_mut();
-                let mut elements = this_ref.array().unwrap();
-                elements.push(element);
-                this_ref.set_primitive(Primitive::Array(elements));
-                runtime.nil()
-            }
-
-            fn pop() {
-                let mut this_ref = this.borrow_mut();
-                let mut elements = this_ref.array().unwrap();
-                let element = elements.pop().ok_or(IndexError {
-                    error: "pop from empty list",
-                })?;
-                this_ref.set_primitive(Primitive::Array(elements));
-                element
-            }
-
-            fn iter() {
-                let iter = runtime.create_object(runtime.builtins.ArrayIter.clone());
-                iter.borrow_mut().set_property("array".into(), this.clone());
-                iter.borrow_mut().set_property("index".into(), runtime.create_number(0.0));
-                iter
-            }
-        );
-
-        define_system_methods!(
-            [class=self.builtins.ArrayIter, runtime=runtime, method_name=method_name, this=this]
-            fn next() {
-                let index_obj = this.borrow().get_property("index").unwrap();
-                let index = index_obj.borrow().number().unwrap() as usize;
-                let array = this.borrow().get_property("array").unwrap();
-                let item = runtime.call_instance_method(
-                    array,
-                    builtin::op::__index__,
-                    Some(index_obj),
-                    None,
-                )?;
-                if item != runtime.builtins.nil {
-                    this.borrow_mut().set_property("index".into(), runtime.create_number((index + 1) as f64));
-                }
-                item
-            }
-        );
-
-        define_system_methods!(
-            [class=self.builtins.Class, runtime=runtime, method_name=method_name, this=this]
-            fn to_s() {
-                runtime.create_string(this.borrow().__name__().unwrap())
             }
         );
 
