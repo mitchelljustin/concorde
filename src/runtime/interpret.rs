@@ -149,11 +149,11 @@ impl Runtime {
 
     fn exec_assignment(&mut self, assignment: Node<Assignment>) -> Result<()> {
         let mut value = self.eval(assignment.v.value);
-        let method_name = builtin::op::method_for_assignment_op(&assignment.v.op.v);
+        let assignment_op = builtin::op::method_for_assignment_op(&assignment.v.op.v);
         match assignment.v.target.v {
             LValue::Variable(var) => {
                 let name = var.v.ident.v.name.clone();
-                if let Some(method_name) = method_name {
+                if let Some(method_name) = assignment_op {
                     let lhs = self.resolve_variable(&name).ok_or(NoSuchVariable {
                         name: name.clone(),
                         node: var.meta,
@@ -175,7 +175,7 @@ impl Runtime {
                     });
                 };
                 let member = member.v.ident.v.name.clone();
-                if let Some(method_name) = method_name {
+                if let Some(method_name) = assignment_op {
                     let lhs = target
                         .borrow()
                         .get_property(&member)
@@ -195,7 +195,7 @@ impl Runtime {
             LValue::Index(index_node) => {
                 let target = self.eval(*index_node.v.target)?;
                 let index = self.eval(*index_node.v.index)?;
-                if let Some(method_name) = method_name {
+                if let Some(method_name) = assignment_op {
                     let lhs = self.call_instance_method(
                         target.clone(),
                         builtin::op::__index__,

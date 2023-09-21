@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::ops::ControlFlow;
+use std::rc::{Rc, Weak};
 
 use object::Primitive;
 
@@ -86,7 +87,11 @@ pub struct Runtime {
     builtins: Builtins,
     stack: Vec<StackFrame>,
     stack_id: usize,
+    strings: HashMap<String, WeakObjectRef>,
+    string_count_marker: usize,
 }
+
+pub const STRING_ALLOCATION_THRESHOLD: usize = 64;
 
 impl Runtime {
     pub fn new() -> Self {
@@ -115,12 +120,41 @@ impl Runtime {
             .cloned()
     }
 
-    pub fn create_string(&mut self, value: String) -> ObjectRef {
+    pub fn create_string(&mut self, value: impl AsRef<str> + Into<String>) -> ObjectRef {
+        let value_str = value.as_ref();
+        if let Some(string_obj) = self.strings.get(value_str).map(Weak::upgrade).flatten() {
+            return string_obj.clone();
+        }
+        self.allocate_string(value)
+    }
+
+    fn allocate_string(&mut self, value: impl AsRef<str> + Into<String> + Sized) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
+        let string = value.into();
         string_obj
             .borrow_mut()
-            .set_primitive(Primitive::String(value));
+            .set_primitive(Primitive::String(string.clone()));
+        self.strings.insert(string, Rc::downgrade(&string_obj));
+        if self.strings.len() - self.string_count_marker >= STRING_ALLOCATION_THRESHOLD {
+            self.cleanup_strings();
+        }
         string_obj
+    }
+
+    pub fn cleanup_strings(&mut self) {
+        let to_delete: Vec<_> = self
+            .strings
+            .iter()
+            .filter_map(|(key, weak)| match weak.upgrade() {
+                None => Some(key.clone()),
+                Some(_) => None,
+            })
+            .collect();
+        let delete_count = to_delete.len();
+        for key in to_delete {
+            self.strings.remove(&key);
+        }
+        self.string_count_marker = self.strings.len();
     }
 
     pub fn create_bool(&mut self, value: bool) -> ObjectRef {

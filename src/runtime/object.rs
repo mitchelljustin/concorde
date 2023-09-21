@@ -53,7 +53,7 @@ pub struct Object {
     weak_self: WeakObjectRef,
     properties: HashMap<String, ObjectRef>,
     methods: HashMap<String, MethodRef>,
-    pub(super) primitive: Option<Primitive>,
+    primitive: Option<Primitive>,
 }
 
 impl PartialEq for Object {

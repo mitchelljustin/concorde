@@ -238,7 +238,7 @@ impl Runtime {
             }
 
             fn to_s() {
-                runtime.create_string(this.borrow().number().unwrap().to_string().into())
+                runtime.create_string(this.borrow().number().unwrap().to_string())
             }
         );
         define_system_methods!(
@@ -249,7 +249,8 @@ impl Runtime {
             }
 
             fn trim() {
-                let result = this.borrow().string().unwrap().trim().into();
+                let string = this.borrow().string().unwrap();
+                let result = string.trim();
                 runtime.create_string(result)
             }
 
@@ -276,21 +277,6 @@ impl Runtime {
                 runtime.create_string(result)
             }
 
-            fn push(other) {
-                if other.borrow().__class__() != runtime.builtins.String {
-                    return Err(TypeError {
-                        expected: builtin::class::String.into(),
-                        class: other.borrow().__class__().borrow().__name__().unwrap(),
-                    });
-                }
-                let Some(Primitive::String(string)) = &mut this.borrow_mut().primitive else {
-                    unreachable!();
-                };
-                let other = other.borrow().string().unwrap();
-                string.push_str(&other);
-                runtime.nil()
-            }
-
             fn to_s() {
                 this
             }
@@ -302,7 +288,7 @@ impl Runtime {
             }
 
             fn to_s() {
-                runtime.create_string("Object()".into())
+                runtime.create_string("Object()")
             }
         );
         define_system_methods!(
@@ -314,7 +300,7 @@ impl Runtime {
             }
 
             fn to_s() {
-                runtime.create_string("nil".into())
+                runtime.create_string("nil")
             }
         );
         define_system_methods!(
@@ -333,7 +319,7 @@ impl Runtime {
             }
 
             fn to_s() {
-                runtime.create_string(this.borrow().bool().unwrap().to_string().into())
+                runtime.create_string(this.borrow().bool().unwrap().to_string())
             }
         );
         define_system_methods!(
@@ -353,7 +339,7 @@ impl Runtime {
                             .map(|string| string.borrow().string().unwrap().to_string()))
                     .collect::<Result<Vec<String>, _>>()?;
                 let inner = strings.join(", ");
-                runtime.create_string(format!("[{inner}]").into())
+                runtime.create_string(format!("[{inner}]"))
             }
 
             fn __index__(index) {
@@ -386,21 +372,20 @@ impl Runtime {
 
             fn push(element) {
                 let mut this_ref = this.borrow_mut();
-                let Some(Primitive::Array(elements)) = &mut this_ref.primitive else {
-                    unreachable!();
-                };
+                let mut elements = this_ref.array().unwrap();
                 elements.push(element);
+                this_ref.set_primitive(Primitive::Array(elements));
                 runtime.nil()
             }
 
             fn pop() {
                 let mut this_ref = this.borrow_mut();
-                let Some(Primitive::Array(elements)) = &mut this_ref.primitive else {
-                    unreachable!();
-                };
-                elements.pop().ok_or(IndexError {
+                let mut elements = this_ref.array().unwrap();
+                let element = elements.pop().ok_or(IndexError {
                     error: "pop from empty list",
-                })?
+                })?;
+                this_ref.set_primitive(Primitive::Array(elements));
+                element
             }
 
             fn iter() {

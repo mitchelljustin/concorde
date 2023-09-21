@@ -18,9 +18,11 @@ class Range
     end
 end
 
-range = Range(0, 100)
+use IO
 n = 0
-for i in range
+s = ""
+for i in Range(0, 100)
     n += i
-    IO::print(i, n)
+    s += "swag" + i.to_s()
+    print(i, n, s)
 end
