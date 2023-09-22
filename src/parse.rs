@@ -4,7 +4,8 @@ use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::parse::Error::{IllegalLValue, RuleMismatch};
+use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
+use crate::runtime::builtin;
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
     ClassDefinition, Continue, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
@@ -22,6 +23,8 @@ pub enum Error {
     IllegalLValue { lvalue: NodeMeta },
     #[error("rule mismatch: expected '{expected:?}', got '{actual:?}'")]
     RuleMismatch { expected: Rule, actual: Rule },
+    #[error("class cannot both have fields and an initializer method: '{class}'")]
+    ClassHasTwoInitializers { class: String },
 }
 
 type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
@@ -72,13 +75,66 @@ impl SourceParser {
                 )
             }
             Rule::class_def => {
-                let [name, body] = pair.clone().into_inner().next_chunk().unwrap();
-                let name = self.parse_ident(&name)?;
-                let body = self.parse_list(body, Self::parse_statement)?;
-                Ok(
-                    Statement::ClassDefinition(ClassDefinition { name, body }.into_node(&pair))
-                        .into_node(&pair),
+                let mut inner = pair.clone().into_inner();
+                let name_pair = inner.next().unwrap();
+                let name = self.parse_ident(&name_pair)?;
+                let params_or_body = inner.next().unwrap();
+                let fields;
+                let mut body;
+                match params_or_body.as_rule() {
+                    Rule::param_list => {
+                        fields = self.parse_list(params_or_body.clone(), Self::parse_param)?;
+                        body = self.parse_block(inner.next().unwrap())?;
+                        let has_init_method = body.v.statements.iter().any(|stmt| {
+                            let Statement::MethodDefinition(method_def) = &stmt.v else {
+                                return false;
+                            };
+                            method_def.v.name.v.name == builtin::method::init
+                        });
+                        if has_init_method {
+                            return Err(ClassHasTwoInitializers {
+                                class: name.v.name.clone(),
+                            });
+                        }
+                        let init_source = fields
+                            .iter()
+                            .map(|field| {
+                                let name = field.v.name.v.name.clone();
+                                format!("self.{name} = {name}\n")
+                            })
+                            .collect::<Vec<String>>()
+                            .join("");
+                        let block = ConcordeParser::parse(Rule::stmts, &init_source)
+                            .unwrap()
+                            .next()
+                            .unwrap();
+                        let init_body = self.parse_block(block)?;
+                        body.v.statements.push(
+                            Statement::MethodDefinition(
+                                MethodDefinition {
+                                    name: Ident {
+                                        name: builtin::method::init.into(),
+                                    }
+                                    .into_node(&name_pair),
+                                    is_class_method: false,
+                                    parameters: fields.clone(),
+                                    body: init_body,
+                                }
+                                .into_node(&params_or_body),
+                            )
+                            .into_node(&params_or_body),
+                        )
+                    }
+                    Rule::stmts => {
+                        fields = Vec::new();
+                        body = self.parse_block(params_or_body)?;
+                    }
+                    _ => unreachable!(),
+                };
+                Ok(Statement::ClassDefinition(
+                    ClassDefinition { name, fields, body }.into_node(&pair),
                 )
+                .into_node(&pair))
             }
             Rule::method_def => Ok(Statement::MethodDefinition(
                 self.parse_method_def(pair.clone())?,
@@ -134,6 +190,13 @@ impl SourceParser {
         }
     }
 
+    fn parse_param(&mut self, pair: Pair<Rule>) -> Result<Node<Parameter>> {
+        Ok(Parameter {
+            name: self.parse_ident(&pair.clone().into_inner().next().unwrap())?,
+        }
+        .into_node(&pair))
+    }
+
     fn parse_method_def(&mut self, pair: Pair<Rule>) -> Result<Node<MethodDefinition>> {
         let mut inner = pair.clone().into_inner();
         let first = inner.next().unwrap();
@@ -145,12 +208,7 @@ impl SourceParser {
         };
         let [param_list, body] = inner.next_chunk().unwrap();
         let name = self.parse_ident(&name)?;
-        let parameters = self.parse_list(param_list, |s, pair| {
-            Ok(Parameter {
-                name: s.parse_ident(&pair.clone().into_inner().next().unwrap())?,
-            }
-            .into_node(&pair))
-        })?;
+        let parameters = self.parse_list(param_list, Self::parse_param)?;
         let body = self.parse_stmts_or_short_stmt(body)?;
         Ok(MethodDefinition {
             is_class_method,

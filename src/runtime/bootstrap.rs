@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
+use crate::runtime::object::{MethodBody, MethodReceiver, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
 use crate::runtime::{builtin, Result, Runtime, StackFrame};
 
@@ -53,6 +53,7 @@ macro define_system_methods(
                     Param::Positional(stringify!($param).into()),
                 )*];
                 class_mut.define_method(
+                    MethodReceiver::Instance,
                     stringify!($name).into(),
                     params,
                     MethodBody::System(|$runtime, $this, $method_name, args| {
@@ -441,6 +442,7 @@ impl Runtime {
             .IO
             .borrow_mut()
             .define_method(
+                MethodReceiver::Class,
                 "print".into(),
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, _this, _method_name, args| {
@@ -454,6 +456,7 @@ impl Runtime {
             .IO
             .borrow_mut()
             .define_method(
+                MethodReceiver::Class,
                 "println".into(),
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, _this, _method_name, args| {

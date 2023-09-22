@@ -19,6 +19,21 @@ pub type SystemMethod = fn(
     arguments: Vec<ObjectRef>,
 ) -> Result<ObjectRef>;
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum MethodReceiver {
+    Instance,
+    Class,
+}
+
+impl MethodReceiver {
+    pub fn separator(self) -> &'static str {
+        match self {
+            MethodReceiver::Instance => ".",
+            MethodReceiver::Class => "::",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum MethodBody {
     User(Node<Block>),
@@ -45,6 +60,7 @@ pub struct Method {
     pub class: WeakObjectRef,
     pub params: Vec<Param>,
     pub body: MethodBody,
+    pub receiver: MethodReceiver,
 }
 
 pub struct Object {
@@ -95,6 +111,7 @@ impl Object {
         self.resolve_own_method(builtin::method::init)
             .unwrap_or_else(|| {
                 Rc::new(Method {
+                    receiver: MethodReceiver::Instance,
                     class: self.weak_self(),
                     name: builtin::method::init.into(),
                     body: MethodBody::System(|runtime, class, _, _| {
@@ -151,6 +168,7 @@ impl Object {
 
     pub fn define_method(
         &mut self,
+        receiver: MethodReceiver,
         method_name: String,
         params: Vec<Param>,
         body: MethodBody,
@@ -170,6 +188,7 @@ impl Object {
         let method = Method {
             name: method_name.clone(),
             class: self.weak_self.clone(),
+            receiver,
             params,
             body,
         };

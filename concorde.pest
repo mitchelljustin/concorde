@@ -61,7 +61,7 @@ method_def = {
 }
 
 class_def = {
-    "class" ~ ident ~ NEWLINE ~
+    "class" ~ ident ~ param_list? ~ NEWLINE ~
         stmts ~
     "end"
 }

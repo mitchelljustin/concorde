@@ -1,7 +1,9 @@
 use std::ops::ControlFlow;
 
 use crate::runtime::builtin;
-use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param, DEFAULT_NAME};
+use crate::runtime::object::{
+    MethodBody, MethodReceiver, MethodRef, ObjectRef, Param, DEFAULT_NAME,
+};
 use crate::runtime::Error::{
     ArityMismatch, BadIterator, BadPath, DuplicateClassDefinition, IllegalAssignmentTarget,
     NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ReturnFromInitializer,
@@ -63,7 +65,7 @@ impl Runtime {
                     ..StackFrame::default()
                 });
                 let mut result = Ok(());
-                for statement in class_def.v.body {
+                for statement in class_def.v.body.v.statements {
                     if let Err(error) = self.exec(statement) {
                         result = Err(error);
                         break;
@@ -258,9 +260,14 @@ impl Runtime {
             .map(|param| Param::Positional(param.v.name.v.name.clone()))
             .collect();
         let body = MethodBody::User(method_def.v.body);
+        let receiver = if method_def.v.is_class_method {
+            MethodReceiver::Class
+        } else {
+            MethodReceiver::Instance
+        };
         class
             .borrow_mut()
-            .define_method(method_name, params, body)?;
+            .define_method(receiver, method_name, params, body)?;
         Ok(())
     }
 
@@ -338,7 +345,7 @@ impl Runtime {
             Expression::Variable(var) => {
                 let method_name = var.v.ident.v.name;
                 if let Some(class_var) = self.resolve_variable(&method_name) && self.is_class(&class_var) {
-                    receiver = class_var.clone();
+                    receiver = self.create_object(class_var.clone());
                     method = class_var.borrow().get_init_method();
                 } else {
                     if let Some((current_receiver, instance_method)) = self
@@ -378,10 +385,12 @@ impl Runtime {
             Expression::Path(mut path) => {
                 let method_component = path.v.components.pop().unwrap();
                 let method_name = method_component.v.ident.v.name;
-                receiver = self.resolve_class_from_path(path)?;
-                if let Some(class) = receiver.borrow().get_property(&method_name) {
-                    method = class.borrow().get_init_method();
+                let class_from_path = self.resolve_class_from_path(path)?;
+                if let Some(class_prop) = class_from_path.borrow().get_property(&method_name) && self.is_class(&class_prop) {
+                    receiver = self.create_object(class_prop.clone());
+                    method = class_prop.borrow().get_init_method();
                 } else {
+                    receiver = class_from_path.clone();
                     method =
                         receiver
                             .borrow()
@@ -393,7 +402,7 @@ impl Runtime {
                                     receiver.borrow().__name__().unwrap_or(DEFAULT_NAME.into())
                                 ),
                             })?;
-                }
+                };
             }
             _ => return Err(NotCallable { node: target.meta }),
         };
@@ -466,6 +475,15 @@ impl Runtime {
         method: MethodRef,
         arguments: impl IntoIterator<Item = ObjectRef>,
     ) -> Result<ObjectRef> {
+        debug_assert_eq!(
+            if self.is_class(&receiver) {
+                MethodReceiver::Class
+            } else {
+                MethodReceiver::Instance
+            },
+            method.receiver,
+            "method receiver type mismatch",
+        );
         let class = method.class.upgrade().expect("method's class was dropped");
         let method_name = method.name.clone();
         let arguments: Vec<ObjectRef> = arguments.into_iter().collect();
@@ -491,13 +509,8 @@ impl Runtime {
                         (name.clone(), arg)
                     })
                     .collect();
-                let instance = if is_init {
-                    self.create_object(method.class.upgrade().unwrap())
-                } else {
-                    receiver.clone()
-                };
                 let stack_id = self.push_stack_frame(StackFrame {
-                    instance: Some(instance.clone()),
+                    instance: Some(receiver.clone()),
                     method: Some(method.clone()),
                     variables,
                     ..StackFrame::default()
@@ -506,14 +519,12 @@ impl Runtime {
                 self.pop_stack_frame(stack_id);
                 if is_init {
                     match result {
-                        Err(ReturnFromMethod { retval: None, .. }) => {}
+                        Err(ReturnFromMethod { retval: None, .. }) | Ok(_) => Ok(receiver),
                         Err(ReturnFromMethod { node, .. }) => {
                             return Err(ReturnFromInitializer { node });
                         }
                         Err(error) => return Err(error),
-                        Ok(_) => {}
                     }
-                    Ok(instance)
                 } else {
                     match result {
                         Err(ReturnFromMethod { retval, .. }) => {
@@ -535,14 +546,20 @@ impl Runtime {
         node: Option<NodeMeta>,
     ) -> Result<ObjectRef> {
         let class = receiver.borrow().__class__();
-        let class_name = class.borrow().__name__().unwrap();
+        let make_no_such_method_error = || NoSuchMethod {
+            search: format!(
+                "{class_name}.{method_name}",
+                class_name = class.borrow().__name__().unwrap()
+            ),
+            node: node.clone().into(),
+        };
         let method = class
             .borrow()
             .resolve_own_method(method_name)
-            .ok_or(NoSuchMethod {
-                search: format!("{class_name}::{method_name}"),
-                node: node.into(),
-            })?;
+            .ok_or_else(make_no_such_method_error)?;
+        if method.receiver != MethodReceiver::Instance {
+            return Err(make_no_such_method_error());
+        }
         self.call_method(receiver, method, arguments)
     }
 

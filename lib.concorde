@@ -1,3 +1,7 @@
+class Integer(value)
+    def to_s() = "Integer(" + self.value + ")"
+end
+
 class Range
     def self::to(finish) = self(0, finish)
     def self::from(start) = self(start, nil)
@@ -16,7 +20,8 @@ class Range
         self.i += 1
         i
     end
+
+    def to_s() = self.start.to_s() + ".." + (self.finish or "")
 end
 
-for i in Range::to(10) do io::println(i)
-
+IO::println(Integer(3))

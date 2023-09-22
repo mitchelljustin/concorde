@@ -9,7 +9,7 @@ use crate::runtime::object::{MethodRef, Object, ObjectRef, WeakObjectRef};
 use crate::types::{MaybeNodeMeta, NodeMeta};
 
 mod bootstrap;
-mod builtin;
+pub mod builtin;
 mod interpret;
 mod object;
 

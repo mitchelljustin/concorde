@@ -184,8 +184,8 @@ define_node_types! {
     }
     ClassDefinition {
         name: Node<Ident>,
-        // fields: Vec<String>,
-        body: Vec<Node<Statement>>,
+        fields: Vec<Node<Parameter>>,
+        body: Node<Block>,
     }
     Parameter {
         name: Node<Ident>,
