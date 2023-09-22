@@ -88,7 +88,7 @@ impl SourceParser {
                 let [binding, iterable, body] = pair.clone().into_inner().next_chunk().unwrap();
                 let binding = self.parse_variable(binding)?;
                 let iterable = self.parse_expression(iterable)?;
-                let body = self.parse_block(body)?;
+                let body = self.parse_stmts_or_short_stmt(body)?;
                 Ok(Statement::ForIn(
                     ForIn {
                         binding,
@@ -102,7 +102,7 @@ impl SourceParser {
             Rule::while_loop => {
                 let [condition, body] = pair.clone().into_inner().next_chunk().unwrap();
                 let condition = self.parse_expression(condition)?;
-                let body = self.parse_block(body)?;
+                let body = self.parse_stmts_or_short_stmt(body)?;
                 Ok(
                     Statement::WhileLoop(WhileLoop { condition, body }.into_node(&pair))
                         .into_node(&pair),

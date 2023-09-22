@@ -25,7 +25,5 @@ def run(n)
     end
 end
 
-for i in [1, 5, 9]
-    run(i)
-end
+for i in [1, 5, 9] do run(i)
 

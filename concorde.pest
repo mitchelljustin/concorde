@@ -38,15 +38,17 @@ use_stmt = {
 }
 
 for_in = {
-    "for" ~ variable ~ "in" ~ expr ~ NEWLINE ~
-        stmts ~
-    "end"
+    "for" ~ variable ~ "in" ~ expr ~ (
+        (NEWLINE ~ stmts ~ "end") | 
+        ("do" ~ short_stmt)
+    )
 }
 
 while_loop = {
-    "while" ~ expr ~ NEWLINE ~
-        stmts ~
-    "end"
+    "while" ~ expr ~ (
+         (NEWLINE ~ stmts ~ "end") | 
+         ("do" ~ short_stmt)
+     )
 }
 
 class_method_spec = { "self::" }
@@ -245,7 +247,8 @@ KEYWORD = @{
     "break" |
     "continue" |
     "return" |
-    "then"
+    "then" |
+    "do"
 }
 
 ident = @{
