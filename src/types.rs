@@ -78,7 +78,7 @@ pub trait NodeVariant: Sized + Debug + Clone {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Operator {
     Equal,
     EqualEqual,

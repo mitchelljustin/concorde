@@ -151,7 +151,7 @@ impl SourceParser {
             }
             .into_node(&pair))
         })?;
-        let body = self.parse_block(body)?;
+        let body = self.parse_stmts_or_short_stmt(body)?;
         Ok(MethodDefinition {
             is_class_method,
             name,
@@ -159,6 +159,20 @@ impl SourceParser {
             parameters,
         }
         .into_node(&pair))
+    }
+
+    fn parse_stmts_or_short_stmt(&mut self, body: Pair<Rule>) -> Result<Node<Block>, Error> {
+        Ok(match body.as_rule() {
+            Rule::stmts => self.parse_block(body)?,
+            _ => self.parse_short_stmt_into_block(body)?,
+        })
+    }
+
+    fn parse_short_stmt_into_block(&mut self, body: Pair<Rule>) -> Result<Node<Block>> {
+        Ok(Block {
+            statements: vec![self.parse_statement(body.clone())?],
+        }
+        .into_node(&body))
     }
 
     fn parse_operator(&mut self, pair: &Pair<Rule>) -> Node<Operator> {
@@ -250,10 +264,10 @@ impl SourceParser {
                 let mut inner = pair.clone().into_inner();
                 let [condition, then_body] = inner.next_chunk().unwrap();
                 let condition = Box::new(self.parse_expression(condition)?);
-                let then_body = self.parse_block(then_body)?;
+                let then_body = self.parse_stmts_or_short_stmt(then_body)?;
                 let else_body = inner
                     .next()
-                    .map(|else_body| self.parse_block(else_body))
+                    .map(|else_body| self.parse_stmts_or_short_stmt(else_body))
                     .transpose()?;
                 Ok(Expression::IfElse(
                     IfElse {

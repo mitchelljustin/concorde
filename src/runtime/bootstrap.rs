@@ -292,6 +292,14 @@ impl Runtime {
                     runtime.create_string(this.borrow().__debug__())
                 }
 
+                fn __eq__(other) {
+                    runtime.create_bool(this == other)
+                }
+
+                fn __neq__(other) {
+                    runtime.create_bool(this != other)
+                }
+
                 fn to_s() {
                     runtime.create_string("Object()")
                 }

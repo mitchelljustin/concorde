@@ -17,15 +17,19 @@ stmts = {
 }
 
 stmt = {
-    assignment |
     method_def |
     class_def |
-    loop_break |
-    loop_continue |
     for_in |
     while_loop |
-    return_stmt |
     use_stmt |
+    short_stmt
+}
+
+short_stmt = _{
+    assignment |
+    loop_break |
+    loop_continue |
+    return_stmt |
     expr
 }
 
@@ -48,9 +52,10 @@ while_loop = {
 class_method_spec = { "self::" }
 
 method_def = {
-    "def" ~ class_method_spec? ~ ident ~ param_list ~ NEWLINE ~
-        stmts ~
-    "end"
+    "def" ~ class_method_spec? ~ ident ~ param_list ~ (
+        (NEWLINE ~ stmts ~ "end") |
+        ("=" ~ expr)
+    )
 }
 
 class_def = {
@@ -163,11 +168,15 @@ op_and = { "and" }
 // primary
 
 if_else = {
-    "if" ~ logical_or ~ NEWLINE ~
-        stmts ~
-    ("else" ~ NEWLINE ~
-        stmts)? ~
-    "end"
+    (
+        "if" ~ logical_or ~ NEWLINE ~
+            stmts ~
+        ("else" ~ NEWLINE ~
+            stmts)? ~
+        "end"
+    ) | (
+        "if" ~ logical_or ~ "then" ~ short_stmt ~ ("else" ~ short_stmt)?
+    )
 }
 
 // a.b -> access(ident, ident)
@@ -235,7 +244,8 @@ KEYWORD = @{
     "not" |
     "break" |
     "continue" |
-    "return"
+    "return" |
+    "then"
 }
 
 ident = @{

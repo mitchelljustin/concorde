@@ -1,28 +1,31 @@
-class Range
+class range
+    def self::to(finish) = self(0, finish)
+    def self::from(start) = self(start, nil)
+
     def init(start, finish)
         self.start = start
+        self.i = start
         self.finish = finish
     end
 
-    def iter()
-        self
-    end
+    def iter() = self
 
     def next()
-        if self.start >= self.finish
-            return nil
-        end
-        i = self.start
-        self.start += 1
+        if self.finish != nil and self.i >= self.finish then return nil
+        i = self.i
+        self.i += 1
         i
     end
 end
 
-use IO
-n = 0
-s = ""
-for i in Range(0, 10000)
-    n += i
-    s += "swag(" + i + ")"
-    print(i, n, s)
+def run(n)
+    for i in range::from(n)
+        IO::print("swag(" + i + ")")
+        if i >= 90 then break
+    end
 end
+
+for i in [1, 5, 9]
+    run(i)
+end
+

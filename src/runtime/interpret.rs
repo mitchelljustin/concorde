@@ -10,7 +10,7 @@ use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
     Access, Assignment, Block, Call, Expression, ForIn, LValue, Literal, MethodDefinition, Node,
-    NodeMeta, Path, Program, Statement,
+    NodeMeta, Operator, Path, Program, Statement,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -70,7 +70,7 @@ impl Runtime {
                 let mut result = Ok(());
                 loop {
                     let condition = self.eval(while_loop.v.condition.clone())?;
-                    if self.is_falsy(condition) {
+                    if self.is_falsy(&condition) {
                         break;
                     }
                     result = self.eval_block(while_loop.v.body.clone()).map(|_| ());
@@ -270,7 +270,7 @@ impl Runtime {
             Expression::Access(access) => self.eval_access(access),
             Expression::IfElse(if_else) => {
                 let condition = self.eval(*if_else.v.condition)?;
-                if self.is_falsy(condition) {
+                if self.is_falsy(&condition) {
                     return if let Some(else_body) = if_else.v.else_body {
                         self.eval_block(else_body)
                     } else {
@@ -280,9 +280,16 @@ impl Runtime {
                 self.eval_block(if_else.v.then_body)
             }
             Expression::Binary(binary) => {
+                let op = binary.v.op.v;
                 let lhs = self.eval(*binary.v.lhs)?;
+                if !self.is_falsy(&lhs) && op == Operator::LogicalOr {
+                    return Ok(lhs);
+                }
+                if self.is_falsy(&lhs) && op == Operator::LogicalAnd {
+                    return Ok(lhs);
+                }
                 let rhs = self.eval(*binary.v.rhs)?;
-                let method_name = builtin::op::method_for_binary_op(&binary.v.op.v).unwrap();
+                let method_name = builtin::op::method_for_binary_op(&op).unwrap();
                 self.call_instance_method(lhs, method_name, [rhs], Some(binary.meta))
             }
             Expression::Index(index_node) => {
@@ -404,8 +411,8 @@ impl Runtime {
         Ok(receiver)
     }
 
-    fn is_falsy(&self, condition: ObjectRef) -> bool {
-        condition == self.builtins.bool_false || condition == self.builtins.nil
+    fn is_falsy(&self, condition: &ObjectRef) -> bool {
+        condition == &self.builtins.bool_false || condition == &self.builtins.nil
     }
 
     fn eval_access(&mut self, access: Node<Access>) -> Result<ObjectRef> {
