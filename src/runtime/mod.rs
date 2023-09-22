@@ -24,8 +24,10 @@ pub enum Error {
     },
     #[error("illegal return of value inside initializer: {node}")]
     ReturnFromInitializer { node: NodeMeta },
-    #[error("duplicate definition of method '{name}'")]
-    DuplicateDefinition { class: ObjectRef, name: String },
+    #[error("duplicate definition of method '{class}::{name}'")]
+    DuplicateMethodDefinition { class: String, name: String },
+    #[error("duplicate definition of '{name}': {node}")]
+    DuplicateClassDefinition { name: String, node: NodeMeta },
     #[error("no such variable '{name}': {node}")]
     NoSuchVariable { name: String, node: NodeMeta },
     #[error("no such property '{name}': {node}")]

@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
-use crate::runtime::{builtin, Runtime, StackFrame};
+use crate::runtime::{builtin, Result, Runtime, StackFrame};
 
 macro define_builtins(
     $Builtins:ident {
@@ -170,11 +170,17 @@ impl Runtime {
                 }
 
                 fn __eq__(other) {
+                    if other.borrow().__class__() != runtime.builtins.Number {
+                        return Ok(runtime.create_bool(false));
+                    }
                     let result = this.borrow().number().unwrap() == other.borrow().number().unwrap();
                     runtime.create_bool(result)
                 }
 
                 fn __neq__(other) {
+                    if other.borrow().__class__() != runtime.builtins.Number {
+                        return Ok(runtime.create_bool(true));
+                    }
                     let result = this.borrow().number().unwrap() != other.borrow().number().unwrap();
                     runtime.create_bool(result)
                 }
@@ -438,23 +444,40 @@ impl Runtime {
                 "print".into(),
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, _this, _method_name, args| {
-                    let arg_count = args.len();
-                    for (i, arg) in args.into_iter().enumerate() {
-                        let string_obj =
-                            runtime.call_instance_method(arg, builtin::method::to_s, None, None)?;
-                        let string = string_obj.borrow().string().ok_or(TypeError {
-                            class: string_obj.borrow().__class__().borrow().__name__().unwrap(),
-                            expected: builtin::class::String.into(),
-                        })?;
-                        print!("{}", string);
-                        if i < arg_count - 1 {
-                            print!(" ");
-                        }
-                    }
+                    runtime.print_objects(args)?;
+                    Ok(runtime.nil())
+                }),
+            )
+            .unwrap();
+
+        self.builtins
+            .IO
+            .borrow_mut()
+            .define_method(
+                "println".into(),
+                vec![Param::Vararg("args".into())],
+                MethodBody::System(|runtime, _this, _method_name, args| {
+                    runtime.print_objects(args)?;
                     println!();
                     Ok(runtime.nil())
                 }),
             )
             .unwrap();
+    }
+
+    fn print_objects(&mut self, args: Vec<ObjectRef>) -> Result<()> {
+        let arg_count = args.len();
+        for (i, arg) in args.into_iter().enumerate() {
+            let string_obj = self.call_instance_method(arg, builtin::method::to_s, None, None)?;
+            let string = string_obj.borrow().string().ok_or(TypeError {
+                class: string_obj.borrow().__class__().borrow().__name__().unwrap(),
+                expected: builtin::class::String.into(),
+            })?;
+            print!("{}", string);
+            if i < arg_count - 1 {
+                print!(" ");
+            }
+        }
+        Ok(())
     }
 }

@@ -40,8 +40,6 @@ pub mod op {
     pub const __lte__: &str = "__lte__";
     pub const __eq__: &str = "__eq__";
     pub const __neq__: &str = "__neq__";
-    pub const __or__: &str = "__or__";
-    pub const __and__: &str = "__and__";
     pub const __neg__: &str = "__neg__";
     pub const __not__: &str = "__not__";
     pub const __index__: &str = "__index__";
@@ -69,8 +67,6 @@ pub mod op {
             Operator::Minus => __sub__,
             Operator::Star => __mul__,
             Operator::Slash => __div__,
-            Operator::LogicalAnd => __and__,
-            Operator::LogicalOr => __or__,
             Operator::LogicalNot => __not__,
             _ => return None,
         })

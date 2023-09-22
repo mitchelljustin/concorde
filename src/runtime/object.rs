@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::{Rc, Weak};
 
 use crate::runtime::builtin;
-use crate::runtime::Error::DuplicateDefinition;
+use crate::runtime::Error::DuplicateMethodDefinition;
 use crate::runtime::{Result, Runtime};
 use crate::types::{Block, Node};
 
@@ -62,7 +62,7 @@ impl PartialEq for Object {
     }
 }
 
-const DEFAULT_NAME: &str = "(anonymous)";
+pub const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
     pub fn __name__(&self) -> Option<String> {
@@ -156,8 +156,14 @@ impl Object {
         body: MethodBody,
     ) -> Result<()> {
         if self.methods.contains_key(&method_name) {
-            return Err(DuplicateDefinition {
-                class: self.weak_self.upgrade().expect("help i dont exist"),
+            return Err(DuplicateMethodDefinition {
+                class: self
+                    .weak_self
+                    .upgrade()
+                    .expect("help i dont exist")
+                    .borrow()
+                    .__name__()
+                    .unwrap(),
                 name: method_name.clone(),
             });
         }

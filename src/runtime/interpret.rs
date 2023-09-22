@@ -1,10 +1,11 @@
 use std::ops::ControlFlow;
 
 use crate::runtime::builtin;
-use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param};
+use crate::runtime::object::{MethodBody, MethodRef, ObjectRef, Param, DEFAULT_NAME};
 use crate::runtime::Error::{
-    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchProperty,
-    NoSuchVariable, NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
+    ArityMismatch, BadIterator, BadPath, DuplicateClassDefinition, IllegalAssignmentTarget,
+    NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ReturnFromInitializer,
+    ReturnFromMethod, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -49,7 +50,14 @@ impl Runtime {
             }
             Statement::Assignment(assignment) => return self.exec_assignment(assignment),
             Statement::ClassDefinition(class_def) => {
-                let class = self.create_simple_class(class_def.v.name.v.name);
+                let name = class_def.v.name.v.name;
+                if let Some(_) = self.resolve_variable(&name) {
+                    return Err(DuplicateClassDefinition {
+                        name,
+                        node: class_def.meta,
+                    });
+                }
+                let class = self.create_simple_class(name);
                 let stack_id = self.push_stack_frame(StackFrame {
                     class: Some(class),
                     ..StackFrame::default()
@@ -282,11 +290,22 @@ impl Runtime {
             Expression::Binary(binary) => {
                 let op = binary.v.op.v;
                 let lhs = self.eval(*binary.v.lhs)?;
-                if !self.is_falsy(&lhs) && op == Operator::LogicalOr {
-                    return Ok(lhs);
-                }
-                if self.is_falsy(&lhs) && op == Operator::LogicalAnd {
-                    return Ok(lhs);
+                match op {
+                    Operator::LogicalOr => {
+                        return Ok(if !self.is_falsy(&lhs) {
+                            lhs
+                        } else {
+                            self.eval(*binary.v.rhs)?
+                        })
+                    }
+                    Operator::LogicalAnd => {
+                        return Ok(if self.is_falsy(&lhs) {
+                            lhs
+                        } else {
+                            self.eval(*binary.v.rhs)?
+                        })
+                    }
+                    _ => {}
                 }
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&op).unwrap();
@@ -371,7 +390,7 @@ impl Runtime {
                                 node: call.meta.into(),
                                 search: format!(
                                     "{}::{method_name}",
-                                    receiver.borrow().__name__().unwrap()
+                                    receiver.borrow().__name__().unwrap_or(DEFAULT_NAME.into())
                                 ),
                             })?;
                 }

@@ -1,4 +1,4 @@
-class range
+class Range
     def self::to(finish) = self(0, finish)
     def self::from(start) = self(start, nil)
 
@@ -18,12 +18,5 @@ class range
     end
 end
 
-def run(n)
-    for i in range::from(n)
-        IO::print("swag(" + i + ")")
-        if i >= 90 then break
-    end
-end
-
-for i in [1, 5, 9] do run(i)
+for i in Range::to(10) do io::println(i)
 
