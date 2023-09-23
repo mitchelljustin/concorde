@@ -25,15 +25,6 @@ pub enum MethodReceiver {
     Class,
 }
 
-impl MethodReceiver {
-    pub fn separator(self) -> &'static str {
-        match self {
-            MethodReceiver::Instance => ".",
-            MethodReceiver::Class => "::",
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum MethodBody {
     User(Node<Block>),

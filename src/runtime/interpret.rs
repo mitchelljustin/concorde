@@ -53,7 +53,7 @@ impl Runtime {
             Statement::Assignment(assignment) => return self.exec_assignment(assignment),
             Statement::ClassDefinition(class_def) => {
                 let name = class_def.v.name.v.name;
-                if let Some(_) = self.resolve_variable(&name) {
+                if self.resolve_variable(&name).is_some() {
                     return Err(DuplicateClassDefinition {
                         name,
                         node: class_def.meta,
@@ -154,7 +154,7 @@ impl Runtime {
             handle_loop_control_flow!(result);
         }
         self.pop_stack_frame(stack_id);
-        return result;
+        result
     }
 
     fn exec_assignment(&mut self, assignment: Node<Assignment>) -> Result<()> {
@@ -347,39 +347,35 @@ impl Runtime {
                 if let Some(class_var) = self.resolve_variable(&method_name) && self.is_class(&class_var) {
                     receiver = self.create_object(class_var.clone());
                     method = class_var.borrow().get_init_method();
+                } else if let Some((current_receiver, instance_method)) = self
+                    .current_instance()
+                    .and_then(|receiver|
+                        receiver
+                            .borrow()
+                            .__class__()
+                            .borrow()
+                            .resolve_own_method(&method_name)
+                            .map(|method| (receiver.clone(), method))) {
+                    receiver = current_receiver;
+                    method = instance_method;
                 } else {
-                    if let Some((current_receiver, instance_method)) = self
-                        .current_instance()
-                        .map(|receiver|
-                            receiver
-                                .borrow()
-                                .__class__()
+                    let mut search_classes = self.stack
+                        .iter()
+                        .flat_map(|frame| frame.open_classes.iter())
+                        .rev();
+                    let (found_class, found_method) = search_classes
+                        .find_map(|class| {
+                            class
                                 .borrow()
                                 .resolve_own_method(&method_name)
-                                .map(|method| (receiver.clone(), method)))
-                        .flatten() {
-                        receiver = current_receiver;
-                        method = instance_method;
-                    } else {
-                        let mut search_classes = self.stack
-                            .iter()
-                            .map(|frame| frame.open_classes.iter())
-                            .flatten()
-                            .rev();
-                        let (found_class, found_method) = search_classes
-                            .find_map(|class| {
-                                class
-                                    .borrow()
-                                    .resolve_own_method(&method_name)
-                                    .map(|method| (class, method))
-                            })
-                            .ok_or(NoSuchMethod {
-                                node: call.meta.into(),
-                                search: method_name,
-                            })?;
-                        receiver = found_class.clone();
-                        method = found_method;
-                    }
+                                .map(|method| (class, method))
+                        })
+                        .ok_or(NoSuchMethod {
+                            node: call.meta.into(),
+                            search: method_name,
+                        })?;
+                    receiver = found_class.clone();
+                    method = found_method;
                 }
             }
             Expression::Path(mut path) => {
@@ -501,7 +497,7 @@ impl Runtime {
                 let variables = method
                     .params
                     .iter()
-                    .zip(arguments.into_iter())
+                    .zip(arguments)
                     .map(|(param, arg)| {
                         let Param::Positional(name) = param else {
                             todo!();
@@ -511,7 +507,7 @@ impl Runtime {
                     .collect();
                 let stack_id = self.push_stack_frame(StackFrame {
                     instance: Some(receiver.clone()),
-                    method: Some(method.clone()),
+                    _method: Some(method.clone()),
                     variables,
                     ..StackFrame::default()
                 });
@@ -520,10 +516,8 @@ impl Runtime {
                 if is_init {
                     match result {
                         Err(ReturnFromMethod { retval: None, .. }) | Ok(_) => Ok(receiver),
-                        Err(ReturnFromMethod { node, .. }) => {
-                            return Err(ReturnFromInitializer { node });
-                        }
-                        Err(error) => return Err(error),
+                        Err(ReturnFromMethod { node, .. }) => Err(ReturnFromInitializer { node }),
+                        Err(error) => Err(error),
                     }
                 } else {
                     match result {

@@ -1,7 +1,7 @@
 use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, MethodReceiver, Object, ObjectRef, Param, Primitive};
-use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, IndexError, TypeError};
+use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, Index, TypeMismatch};
 use crate::runtime::{builtin, Result, Runtime, StackFrame};
 
 macro define_builtins(
@@ -46,6 +46,7 @@ macro define_system_methods(
     )+
 ) {
     $(
+        #[allow(unreachable_code, unused_variables)]
         {
             let mut class_mut = $class.borrow_mut();
             $(
@@ -285,7 +286,7 @@ impl Runtime {
                         None,
                         None,
                     )?.borrow().string().unwrap();
-                    let mut me = this.borrow().string().unwrap();
+                    let me = this.borrow().string().unwrap();
                     let result = me.add(&other_string);
                     runtime.create_string(result)
                 }
@@ -361,13 +362,13 @@ impl Runtime {
 
                 fn __index__(index) {
                     if index.borrow().__class__() != runtime.builtins.Number {
-                        return Err(TypeError {
+                        return Err(TypeMismatch {
                             class: index.borrow().__class__().borrow().__name__().unwrap(),
                             expected: builtin::class::Number.into(),
                         });
                     }
                     let elements = this.borrow().array().unwrap();
-                    if elements.len() == 0 {
+                    if elements.is_empty() {
                         return Ok(runtime.nil());
                     }
                     let index = index.borrow().number().unwrap() as isize;
@@ -398,7 +399,7 @@ impl Runtime {
                 fn pop() {
                     let mut this_ref = this.borrow_mut();
                     let mut elements = this_ref.array().unwrap();
-                    let element = elements.pop().ok_or(IndexError {
+                    let element = elements.pop().ok_or(Index {
                         error: "pop from empty list",
                     })?;
                     this_ref.set_primitive(Primitive::Array(elements));
@@ -472,7 +473,7 @@ impl Runtime {
         let arg_count = args.len();
         for (i, arg) in args.into_iter().enumerate() {
             let string_obj = self.call_instance_method(arg, builtin::method::to_s, None, None)?;
-            let string = string_obj.borrow().string().ok_or(TypeError {
+            let string = string_obj.borrow().string().ok_or(TypeMismatch {
                 class: string_obj.borrow().__class__().borrow().__name__().unwrap(),
                 expected: builtin::class::String.into(),
             })?;

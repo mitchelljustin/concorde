@@ -34,11 +34,6 @@ pub enum Error {
     NoSuchProperty { name: String, node: NodeMeta },
     #[error("no such method '{search}': {node}")]
     NoSuchMethod { node: MaybeNodeMeta, search: String },
-    #[error("not a class method: '{class_name}::{method_name}'")]
-    NotAClassMethod {
-        class_name: String,
-        method_name: String,
-    },
     #[error("arity mismatch for '{class_name}::{method_name}()': expected {expected} args, got {actual}")]
     ArityMismatch {
         class_name: String,
@@ -57,11 +52,11 @@ pub enum Error {
     #[error("illegal assignment target: {access}")]
     IllegalAssignmentTarget { access: NodeMeta },
     #[error("index error: {error}")]
-    IndexError { error: &'static str },
+    Index { error: &'static str },
     #[error("illegal constructor call: {class}")]
     IllegalConstructorCall { class: String },
     #[error("type error: expected {expected}, got {class}")]
-    TypeError { expected: String, class: String },
+    TypeMismatch { expected: String, class: String },
     #[error("bad path contains non-class '{non_class}': {path}")]
     BadPath { non_class: String, path: NodeMeta },
     #[error("bad iterator, {reason}: {node}")]
@@ -78,7 +73,7 @@ pub struct StackFrame {
     id: usize,
     instance: Option<ObjectRef>,
     class: Option<ObjectRef>,
-    method: Option<MethodRef>,
+    _method: Option<MethodRef>,
     open_classes: Vec<ObjectRef>,
     variables: HashMap<String, ObjectRef>,
 }
@@ -104,7 +99,7 @@ impl Runtime {
 
     fn find_closest_in_stack<T>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<&T> {
         for frame in self.stack.iter().rev() {
-            if let Some(found) = finder(&frame) {
+            if let Some(found) = finder(frame) {
                 return Some(found);
             }
         }
@@ -123,14 +118,13 @@ impl Runtime {
     }
 
     pub fn create_string(&mut self, value: impl AsRef<str> + Into<String>) -> ObjectRef {
-        let value_str = value.as_ref();
-        if let Some(string_obj) = self.strings.get(value_str).map(Weak::upgrade).flatten() {
+        if let Some(string_obj) = self.strings.get(value.as_ref()).and_then(Weak::upgrade) {
             return string_obj.clone();
         }
         self.allocate_string(value)
     }
 
-    fn allocate_string(&mut self, value: impl AsRef<str> + Into<String> + Sized) -> ObjectRef {
+    fn allocate_string(&mut self, value: impl Into<String>) -> ObjectRef {
         let string_obj = self.create_object(self.builtins.String.clone());
         let string = value.into();
         string_obj

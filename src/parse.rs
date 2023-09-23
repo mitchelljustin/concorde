@@ -16,7 +16,7 @@ use crate::types::{
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("pest error: {0}")]
-    Pest(#[from] pest::error::Error<Rule>),
+    Pest(#[from] Box<pest::error::Error<Rule>>),
     #[error("parse float error: {0}")]
     ParseFloat(#[from] ParseFloatError),
     #[error("illegal lvalue for assignment: {lvalue}")]
@@ -39,7 +39,7 @@ pub struct SourceParser {}
 impl SourceParser {
     pub fn parse(mut self, source: &str) -> Result<Node<Program>, TopError> {
         let pair = ConcordeParser::parse(Rule::program, source)
-            .map_err(Error::Pest)?
+            .map_err(|err| Error::Pest(Box::new(err)))?
             .next()
             .unwrap();
         let body = self.parse_block(pair.clone().into_inner().next().unwrap())?;
@@ -182,7 +182,7 @@ impl SourceParser {
             }
             Rule::use_stmt => {
                 let path = pair.clone().into_inner().next().unwrap();
-                let mut components = self.parse_list(path.clone(), Self::parse_variable)?;
+                let components = self.parse_list(path.clone(), Self::parse_variable)?;
                 let path = Path { components }.into_node(&path);
                 Ok(Statement::Use(Use { path }.into_node(&pair)).into_node(&pair))
             }
@@ -342,7 +342,7 @@ impl SourceParser {
     }
 
     fn parse_call(&mut self, pair: &Pair<Rule>) -> Result<Node<Expression>> {
-        self.assert_rule(&pair, Rule::call)?;
+        self.assert_rule(pair, Rule::call)?;
         let mut inner = pair.clone().into_inner();
         let mut expr = self.parse_expression(inner.next().unwrap())?;
         for arg_list in inner {
@@ -356,9 +356,9 @@ impl SourceParser {
                     target: Box::new(expr),
                     arguments,
                 }
-                .into_node(&pair),
+                .into_node(pair),
             )
-            .into_node(&pair)
+            .into_node(pair)
         }
         Ok(expr)
     }
@@ -440,11 +440,9 @@ impl SourceParser {
             Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
             Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
             Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
-            _ => {
-                return Err(IllegalLValue {
-                    lvalue: lvalue.meta,
-                })
-            }
+            _ => Err(IllegalLValue {
+                lvalue: lvalue.meta,
+            }),
         }
     }
 
@@ -460,7 +458,7 @@ impl SourceParser {
         Ok(Ident {
             name: pair.as_str().into(),
         }
-        .into_node(&pair))
+        .into_node(pair))
     }
 
     fn assert_rule(&self, pair: &Pair<Rule>, expected: Rule) -> Result<()> {
