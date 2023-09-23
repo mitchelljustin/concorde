@@ -209,7 +209,7 @@ impl Runtime {
                     let lhs = self.call_instance_method(
                         target.clone(),
                         builtin::op::__index__,
-                        [index.clone()],
+                        Some(index.clone()),
                         Some(index_node.meta.clone()),
                     )?;
                     value = self.call_instance_method(

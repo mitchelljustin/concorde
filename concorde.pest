@@ -71,9 +71,11 @@ loop_continue = { "continue" }
 return_stmt = { "return" ~ expr? }
 
 param_list = {
-    ("(" ~ ")") |
-    ("(" ~ param ~ ("," ~ param)* ~ ","? ~ ")")
+    ("(" ~ space ~ ")") |
+    ("(" ~ space ~ param ~ (space ~ "," ~ space ~ param)* ~ space ~ ","? ~ space ~ ")")
 }
+
+space = _{ NEWLINE *}
 
 param = {
     ident
@@ -215,12 +217,12 @@ variable = {
 }
 
 arg_list = {
-    ("(" ~ ")") |
-    ("(" ~ expr_list ~ ")")
+    ("(" ~ space ~ ")") |
+    ("(" ~ space ~ expr_list ~ space ~ ")")
 }
 
 expr_list = {
-    expr ~ ("," ~ expr)* ~ ","?
+    space ~ expr ~ (space ~ "," ~ space ~ expr)* ~ space ~ ","?
 }
 
 literal = {

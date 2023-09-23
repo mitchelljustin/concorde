@@ -1,4 +1,6 @@
-class Integer(value)
+class Integer(
+    value,
+)
     def to_s() = "Integer(" + self.value + ")"
 end
 
@@ -8,8 +10,8 @@ class Range
 
     def init(start, finish)
         self.start = start
-        self.i = start
         self.finish = finish
+        self.i = start
     end
 
     def iter() = self
@@ -24,4 +26,8 @@ class Range
     def to_s() = self.start.to_s() + ".." + (self.finish or "")
 end
 
-IO::println(Integer(3))
+class Map(iter)
+end
+
+range = Range(0, 100)
+IO::println(range)
