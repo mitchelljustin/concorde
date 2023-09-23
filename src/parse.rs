@@ -8,9 +8,9 @@ use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
 use crate::runtime::builtin;
 use crate::types::{
     Access, AnyNodeVariant, Array, Assignment, Binary, Block, Boolean, Break, Call,
-    ClassDefinition, Continue, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
-    MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program,
-    Return, Statement, StringLit, TopError, Unary, Use, Variable, WhileLoop,
+    ClassDefinition, Continue, Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue,
+    Literal, MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path,
+    Program, Return, Statement, StringLit, TopError, Unary, Use, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -426,6 +426,17 @@ impl SourceParser {
                 let expr_list = pair.clone().into_inner().next().unwrap();
                 let elements = self.parse_list(expr_list, Self::parse_expression)?;
                 Ok(Literal::Array(Array { elements }.into_node(&pair)).into_node(&pair))
+            }
+            Rule::dict => {
+                let entries = pair
+                    .clone()
+                    .into_inner()
+                    .array_chunks()
+                    .map(|[key, value]| {
+                        Ok((self.parse_ident(&key)?, self.parse_expression(value)?))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Literal::Dictionary(Dictionary { entries }.into_node(&pair)).into_node(&pair))
             }
             rule => unreachable!("{:?}", rule),
         }

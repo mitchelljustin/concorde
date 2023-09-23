@@ -11,6 +11,8 @@ pub mod class {
     pub const IO: &str = "IO";
     pub const Bool: &str = "Bool";
     pub const Number: &str = "Number";
+    pub const Dictionary: &str = "Dictionary";
+    pub const DictionaryIter: &str = "DictionaryIter";
     pub const Array: &str = "Array";
     pub const ArrayIter: &str = "ArrayIter";
 }

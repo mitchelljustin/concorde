@@ -43,6 +43,7 @@ pub enum Primitive {
     Number(f64),
     Boolean(bool),
     Array(Vec<ObjectRef>),
+    Dictionary(HashMap<String, ObjectRef>),
 }
 
 #[derive(Debug)]
@@ -120,13 +121,6 @@ impl Object {
         Some(value)
     }
 
-    pub fn string(&self) -> Option<String> {
-        let Some(Primitive::String(value)) = self.primitive.clone() else {
-            return None;
-        };
-        Some(value)
-    }
-
     pub fn bool(&self) -> Option<bool> {
         let Some(Primitive::Boolean(value)) = self.primitive.clone() else {
             return None;
@@ -134,8 +128,36 @@ impl Object {
         Some(value)
     }
 
-    pub fn array(&self) -> Option<Vec<ObjectRef>> {
-        let Some(Primitive::Array(value)) = self.primitive.clone() else {
+    pub fn string(&self) -> Option<&String> {
+        let Some(Primitive::String(value)) = &self.primitive else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn array(&self) -> Option<&Vec<ObjectRef>> {
+        let Some(Primitive::Array(value)) = &self.primitive else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn dictionary(&self) -> Option<&HashMap<String, ObjectRef>> {
+        let Some(Primitive::Dictionary(value)) = &self.primitive else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn array_mut(&mut self) -> Option<&mut Vec<ObjectRef>> {
+        let Some(Primitive::Array(value)) = &mut self.primitive else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn dictionary_mut(&mut self) -> Option<&mut HashMap<String, ObjectRef>> {
+        let Some(Primitive::Dictionary(value)) = &mut self.primitive else {
             return None;
         };
         Some(value)

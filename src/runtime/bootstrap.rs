@@ -83,6 +83,8 @@ define_builtins!(Builtins {
     Bool,
     Number,
     Array,
+    Dictionary,
+    DictionaryIter,
     ArrayIter,
     IO,
     Main,
@@ -135,6 +137,11 @@ impl Runtime {
         // create Array
         self.builtins.Array = self.create_simple_class(builtin::class::Array.into());
         self.builtins.ArrayIter = self.create_simple_class(builtin::class::ArrayIter.into());
+
+        // create Dictionary
+        self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary.into());
+        self.builtins.DictionaryIter =
+            self.create_simple_class(builtin::class::DictionaryIter.into());
 
         // create booleans
         self.builtins.Bool = self.create_simple_class(builtin::class::Bool.into());
@@ -264,7 +271,7 @@ impl Runtime {
                 }
 
                 fn trim() {
-                    let string = this.borrow().string().unwrap();
+                    let string = this.borrow().string().unwrap().clone();
                     let result = string.trim();
                     runtime.create_string(result)
                 }
@@ -285,8 +292,8 @@ impl Runtime {
                         builtin::method::to_s,
                         None,
                         None,
-                    )?.borrow().string().unwrap();
-                    let me = this.borrow().string().unwrap();
+                    )?.borrow().string().unwrap().clone();
+                    let me = this.borrow().string().unwrap().clone();
                     let result = me.add(&other_string);
                     runtime.create_string(result)
                 }
@@ -343,9 +350,10 @@ impl Runtime {
             }
             impl self.builtins.Array => {
                 fn to_s() {
-                    let elements = this.borrow().array().unwrap();
+                    let elements = this.borrow().array().unwrap().clone();
                     let strings = elements
-                        .into_iter()
+                        .iter()
+                        .cloned()
                         .map(|object|
                             runtime
                                 .call_instance_method(
@@ -367,7 +375,7 @@ impl Runtime {
                             expected: builtin::class::Number.into(),
                         });
                     }
-                    let elements = this.borrow().array().unwrap();
+                    let elements = this.borrow().array().unwrap().clone();
                     if elements.is_empty() {
                         return Ok(runtime.nil());
                     }
@@ -390,7 +398,7 @@ impl Runtime {
 
                 fn push(element) {
                     let mut this_ref = this.borrow_mut();
-                    let mut elements = this_ref.array().unwrap();
+                    let mut elements = this_ref.array().unwrap().clone();
                     elements.push(element);
                     this_ref.set_primitive(Primitive::Array(elements));
                     runtime.nil()
@@ -398,7 +406,7 @@ impl Runtime {
 
                 fn pop() {
                     let mut this_ref = this.borrow_mut();
-                    let mut elements = this_ref.array().unwrap();
+                    let mut elements = this_ref.array().unwrap().clone();
                     let element = elements.pop().ok_or(Index {
                         error: "pop from empty list",
                     })?;
@@ -437,6 +445,60 @@ impl Runtime {
                     runtime.create_string(this.borrow().__name__().unwrap())
                 }
             }
+
+            impl self.builtins.Dictionary => {
+                fn __index__(key) {
+                    let key_ref = key.borrow();
+                    let key_class = key_ref.__class__();
+                    if key_class != runtime.builtins.String {
+                        return Err(TypeMismatch {
+                            class: key_class.borrow().__name__().unwrap(),
+                            expected: "String".into(),
+                        });
+                    }
+                    let key_string: &String = key_ref.string().unwrap();
+                    let this_ref = this.borrow();
+                    let dict = this_ref.dictionary().unwrap();
+                    dict.get(key_string).cloned().unwrap_or_else(|| runtime.nil())
+                }
+
+                fn __set_index__(key, value) {
+                    let key_ref = key.borrow();
+                    let key_class = key_ref.__class__();
+                    if key_class != runtime.builtins.String {
+                        return Err(TypeMismatch {
+                            class: key_class.borrow().__name__().unwrap(),
+                            expected: "String".into(),
+                        });
+                    }
+                    let key_string: &String = key_ref.string().unwrap();
+                    let mut this_ref = this.borrow_mut();
+                    let dict = this_ref.dictionary_mut().unwrap();
+                    dict.insert(key_string.clone(), value);
+                    runtime.nil()
+                }
+
+                fn to_s() {
+                    let this_ref = this.borrow();
+                    let dict = this_ref.dictionary().unwrap();
+                    let entries = dict
+                        .iter()
+                        .map(|(key, value)| {
+                            let value_obj = runtime.call_instance_method(
+                                value.clone(),
+                                builtin::method::to_s,
+                                None,
+                                None,
+                            )?;
+                            let value_ref = value_obj.borrow();
+                            let value = value_ref.string().unwrap();
+                            Ok(format!("    {key}: {value},"))
+                        })
+                        .collect::<Result<Vec<String>>>()?;
+                    let inner = if entries.is_empty() { ":".to_string() } else { format!("\n{}\n", entries.join("\n")) };
+                    runtime.create_string(format!("[{inner}]"))
+                }
+            }
         );
 
         self.builtins
@@ -473,7 +535,7 @@ impl Runtime {
         let arg_count = args.len();
         for (i, arg) in args.into_iter().enumerate() {
             let string_obj = self.call_instance_method(arg, builtin::method::to_s, None, None)?;
-            let string = string_obj.borrow().string().ok_or(TypeMismatch {
+            let string = string_obj.borrow().string().cloned().ok_or(TypeMismatch {
                 class: string_obj.borrow().__class__().borrow().__name__().unwrap(),
                 expected: builtin::class::String.into(),
             })?;

@@ -226,7 +226,7 @@ expr_list = {
 }
 
 literal = {
-    array | number | string | bool | nil
+    dict | array | number | string | bool | nil
 }
 
 bool = @{ "true" | "false" }
@@ -273,6 +273,15 @@ string = @{
 array = {
     ("[" ~ "]") |
     ("[" ~ expr_list ~ "]")
+}
+
+dict = {
+    ("[" ~ space ~ ":" ~ space ~ "]") |
+    ("[" ~ dict_entry ~ ("," ~ dict_entry)* ~ ","? ~ space ~ "]")
+}
+
+dict_entry = _{
+    space ~ ident ~ space ~ ":" ~ space ~ expr ~ space
 }
 
 string_inner = ${(!"\"" ~ ANY)*}

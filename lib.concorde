@@ -29,5 +29,12 @@ end
 class Map(iter)
 end
 
-range = Range(0, 100)
-IO::println(range)
+m = [
+    a: 1,
+    b: 2,
+]
+IO::println(m)
+IO::println([:])
+IO::println(m["a"])
+IO::println(m["c"])
+IO::println("OK!")

@@ -120,6 +120,9 @@ define_node_types! {
     Array {
         elements: Vec<Node<Expression>>,
     }
+    Dictionary {
+        entries: Vec<(Node<Ident>, Node<Expression>)>,
+    }
 
     Program {
         body: Node<Block>,
@@ -224,6 +227,7 @@ define_collector_enums! {
     }
     Literal {
         Array,
+        Dictionary,
         StringLit,
         Number,
         Boolean,

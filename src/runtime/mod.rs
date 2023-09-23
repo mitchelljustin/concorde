@@ -177,6 +177,14 @@ impl Runtime {
         array_obj
     }
 
+    pub fn create_dictionary(&mut self, entries: Vec<(String, ObjectRef)>) -> ObjectRef {
+        let dict_obj = self.create_object(self.builtins.Dictionary.clone());
+        dict_obj
+            .borrow_mut()
+            .set_primitive(Primitive::Dictionary(entries.into_iter().collect()));
+        dict_obj
+    }
+
     pub fn create_object(&mut self, class: ObjectRef) -> ObjectRef {
         let object = Object::new_of_class(class.clone());
         object

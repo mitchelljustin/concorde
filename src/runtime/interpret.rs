@@ -592,6 +592,15 @@ impl Runtime {
                 Ok(self.create_array(elements))
             }
             Literal::Nil(_) => Ok(self.nil()),
+            Literal::Dictionary(dictionary) => {
+                let entries = dictionary
+                    .v
+                    .entries
+                    .into_iter()
+                    .map(|(key, value)| Ok((key.v.name, self.eval(value)?)))
+                    .collect::<Result<_>>()?;
+                Ok(self.create_dictionary(entries))
+            }
         }
     }
 }
