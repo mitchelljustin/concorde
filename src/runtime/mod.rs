@@ -217,12 +217,31 @@ impl Runtime {
         if name == builtin::SELF {
             return self.current_instance();
         }
-        self.find_closest_in_stack(|frame| frame.variables.get(name))
-            .cloned()
+        let mut found_instance = false;
+        for frame in self.stack.iter().rev() {
+            if let Some(value) = frame.variables.get(name) {
+                return Some(value.clone());
+            }
+            if !found_instance && let Some(instance) = &frame.instance {
+                found_instance = true;
+                if let Some(value) = instance.borrow().get_property(name) {
+                    return Some(value.clone());
+                }
+            }
+        }
+        None
     }
 
     pub fn assign_variable(&mut self, name: String, object: ObjectRef) {
+        let mut found_instance = false;
         for frame in self.stack.iter_mut().rev() {
+            if !found_instance && let Some(instance) = &frame.instance {
+                found_instance = true;
+                if instance.borrow().get_property(&name).is_some() {
+                    instance.borrow_mut().set_property(name, object);
+                    return;
+                }
+            }
             if frame.variables.contains_key(&name) {
                 frame.variables.insert(name.clone(), object.clone());
                 return;

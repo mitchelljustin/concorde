@@ -316,7 +316,7 @@ impl Runtime {
                 }
                 let rhs = self.eval(*binary.v.rhs)?;
                 let method_name = builtin::op::method_for_binary_op(&op).unwrap();
-                self.call_instance_method(lhs, method_name, [rhs], Some(binary.meta))
+                self.call_instance_method(lhs, method_name, Some(rhs), Some(binary.meta))
             }
             Expression::Index(index_node) => {
                 let target = self.eval(*index_node.v.target)?;
@@ -324,7 +324,7 @@ impl Runtime {
                 self.call_instance_method(
                     target,
                     builtin::op::__index__,
-                    [index],
+                    Some(index),
                     Some(index_node.meta),
                 )
             }

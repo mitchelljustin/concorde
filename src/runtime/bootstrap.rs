@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, MethodReceiver, Object, ObjectRef, Param, Primitive};
@@ -447,6 +448,11 @@ impl Runtime {
             }
 
             impl self.builtins.Dictionary => {
+                fn init() {
+                    this.borrow_mut().set_primitive(Primitive::Dictionary(HashMap::default()));
+                    this
+                }
+
                 fn __index__(key) {
                     let key_ref = key.borrow();
                     let key_class = key_ref.__class__();
