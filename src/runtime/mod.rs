@@ -26,8 +26,6 @@ pub enum Error {
     ReturnFromInitializer { node: NodeMeta },
     #[error("duplicate definition of method '{class}::{name}'")]
     DuplicateMethodDefinition { class: String, name: String },
-    #[error("duplicate definition of '{name}': {node}")]
-    DuplicateClassDefinition { name: String, node: NodeMeta },
     #[error("no such variable '{name}': {node}")]
     NoSuchVariable { name: String, node: NodeMeta },
     #[error("no such property '{name}': {node}")]
@@ -189,7 +187,7 @@ impl Runtime {
         let object = Object::new_of_class(class.clone());
         object
             .borrow_mut()
-            .set_property(builtin::property::__class__.into(), class);
+            .set_property(builtin::property::__class__, class);
         self.all_objects.push(object.borrow().weak_self());
         object
     }
@@ -200,13 +198,13 @@ impl Runtime {
         let name_obj = self.create_string(name.clone());
         class
             .borrow_mut()
-            .set_property(builtin::property::__name__.into(), name_obj);
+            .set_property(builtin::property::__name__, name_obj);
         self.assign_global(name, class.clone());
         class
     }
 
-    pub fn create_simple_class(&mut self, name: String) -> ObjectRef {
-        self.create_class(name, Some(self.builtins.Object.clone()))
+    pub fn create_simple_class(&mut self, name: impl Into<String>) -> ObjectRef {
+        self.create_class(name.into(), Some(self.builtins.Object.clone()))
     }
 
     pub fn assign_global(&mut self, name: String, object: ObjectRef) {

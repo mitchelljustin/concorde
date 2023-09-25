@@ -1,11 +1,6 @@
-class Integer(
-    value,
-)
-    def to_s() = "Integer(" + self.value + ")"
-end
 
 class Range
-    def self::to(finish) = self(0, finish)
+    def self::upto(finish) = self(0, finish)
     def self::from(start) = self(start, nil)
 
     def init(start, finish)
@@ -26,6 +21,11 @@ class Range
     def to_s() = start.to_s() + ".." + (finish or "")
 end
 
+class Number
+    def upto(finish) = Range(self, finish)
 
-for i in Range::to(100) do IO::print(i, "")
+end
+
+use IO
+println(0.upto(10))
 

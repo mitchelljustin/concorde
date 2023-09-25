@@ -1,7 +1,7 @@
 use std::num::ParseFloatError;
 
-use pest::iterators::Pair;
-use pest::Parser;
+use pest::iterators::{Pair, Pairs};
+use pest::{Parser, RuleType};
 use pest_derive::Parser;
 
 use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
@@ -35,6 +35,18 @@ struct ConcordeParser;
 
 #[derive(Default, Debug)]
 pub struct SourceParser {}
+
+trait PairsExt<'a, R: RuleType> {
+    fn next_if_rule(&mut self, rule: R) -> Option<Pair<'a, R>>;
+}
+
+impl<'a> PairsExt<'a, Rule> for Pairs<'a, Rule> {
+    fn next_if_rule(&mut self, rule: Rule) -> Option<Pair<'a, Rule>> {
+        self.peek()
+            .and_then(|pair| (pair.as_rule() == rule).then(|| self.next()))
+            .flatten()
+    }
+}
 
 impl SourceParser {
     pub fn parse(mut self, source: &str) -> Result<Node<Program>, TopError> {
@@ -199,14 +211,8 @@ impl SourceParser {
 
     fn parse_method_def(&mut self, pair: Pair<Rule>) -> Result<Node<MethodDefinition>> {
         let mut inner = pair.clone().into_inner();
-        let first = inner.next().unwrap();
-        let is_class_method = first.as_rule() == Rule::class_method_spec;
-        let name = if is_class_method {
-            inner.next().unwrap()
-        } else {
-            first
-        };
-        let [param_list, body] = inner.next_chunk().unwrap();
+        let is_class_method = inner.next_if_rule(Rule::class_method_spec).is_some();
+        let [name, param_list, body] = inner.next_chunk().unwrap();
         let name = self.parse_ident(&name)?;
         let parameters = self.parse_list(param_list, Self::parse_param)?;
         let body = self.parse_stmts_or_short_stmt(body)?;
@@ -428,14 +434,16 @@ impl SourceParser {
                 Ok(Literal::Array(Array { elements }.into_node(&pair)).into_node(&pair))
             }
             Rule::dict => {
-                let entries = pair
+                let entries: Vec<_> = pair
                     .clone()
                     .into_inner()
                     .array_chunks()
                     .map(|[key, value]| {
-                        Ok((self.parse_ident(&key)?, self.parse_expression(value)?))
+                        let key = self.parse_ident(&key)?;
+                        let value = self.parse_expression(value)?;
+                        Ok::<_, Error>((key, value))
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .try_collect()?;
                 Ok(Literal::Dictionary(Dictionary { entries }.into_node(&pair)).into_node(&pair))
             }
             rule => unreachable!("{:?}", rule),

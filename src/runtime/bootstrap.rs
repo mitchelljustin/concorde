@@ -119,11 +119,11 @@ impl Runtime {
         let name_String_obj = self.create_string(name_String);
         Class
             .borrow_mut()
-            .set_property(builtin::property::__name__.into(), name_Class_obj);
+            .set_property(builtin::property::__name__, name_Class_obj);
         self.builtins
             .String
             .borrow_mut()
-            .set_property(builtin::property::__name__.into(), name_String_obj);
+            .set_property(builtin::property::__name__, name_String_obj);
 
         let name_Object: String = builtin::class::Object.into();
         self.builtins.Object = self.create_class(name_Object.clone(), None);
@@ -132,20 +132,19 @@ impl Runtime {
         // now we can create simple classes
 
         // create nil
-        self.builtins.NilClass = self.create_simple_class(builtin::class::NilClass.into());
+        self.builtins.NilClass = self.create_simple_class(builtin::class::NilClass);
         self.builtins.nil = self.create_object(self.builtins.NilClass.clone());
 
         // create Array
-        self.builtins.Array = self.create_simple_class(builtin::class::Array.into());
-        self.builtins.ArrayIter = self.create_simple_class(builtin::class::ArrayIter.into());
+        self.builtins.Array = self.create_simple_class(builtin::class::Array);
+        self.builtins.ArrayIter = self.create_simple_class(builtin::class::ArrayIter);
 
         // create Dictionary
-        self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary.into());
-        self.builtins.DictionaryIter =
-            self.create_simple_class(builtin::class::DictionaryIter.into());
+        self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary);
+        self.builtins.DictionaryIter = self.create_simple_class(builtin::class::DictionaryIter);
 
         // create booleans
-        self.builtins.Bool = self.create_simple_class(builtin::class::Bool.into());
+        self.builtins.Bool = self.create_simple_class(builtin::class::Bool);
         self.builtins.bool_true = self.create_object(self.builtins.Bool.clone());
         self.builtins
             .bool_true
@@ -158,15 +157,15 @@ impl Runtime {
             .set_primitive(Primitive::Boolean(false));
 
         // create number
-        self.builtins.Number = self.create_simple_class(builtin::class::Number.into());
+        self.builtins.Number = self.create_simple_class(builtin::class::Number);
 
         // create main
-        self.builtins.Main = self.create_simple_class(builtin::class::Main.into());
+        self.builtins.Main = self.create_simple_class(builtin::class::Main);
         let root_frame = &mut self.stack[0];
         root_frame.class = Some(self.builtins.Main.clone());
         root_frame.open_classes.push(self.builtins.Main.clone());
 
-        self.builtins.IO = self.create_simple_class(builtin::class::IO.into());
+        self.builtins.IO = self.create_simple_class(builtin::class::IO);
     }
 
     fn bootstrap_stdlib(&mut self) {
@@ -351,8 +350,9 @@ impl Runtime {
             }
             impl self.builtins.Array => {
                 fn to_s() {
-                    let elements = this.borrow().array().unwrap().clone();
-                    let strings = elements
+                    let this_ref = this.borrow();
+                    let elements = this_ref.array().unwrap();
+                    let strings: Vec<_> = elements
                         .iter()
                         .cloned()
                         .map(|object|
@@ -364,7 +364,7 @@ impl Runtime {
                                     None,
                                 )
                                 .map(|string| string.borrow().string().unwrap().to_string()))
-                        .collect::<Result<Vec<String>, _>>()?;
+                        .try_collect()?;
                     let inner = strings.join(", ");
                     runtime.create_string(format!("[{inner}]"))
                 }
@@ -376,7 +376,8 @@ impl Runtime {
                             expected: builtin::class::Number.into(),
                         });
                     }
-                    let elements = this.borrow().array().unwrap().clone();
+                    let this_ref = this.borrow();
+                    let elements = this_ref.array().unwrap();
                     if elements.is_empty() {
                         return Ok(runtime.nil());
                     }
@@ -398,27 +399,22 @@ impl Runtime {
                 }
 
                 fn push(element) {
-                    let mut this_ref = this.borrow_mut();
-                    let mut elements = this_ref.array().unwrap().clone();
-                    elements.push(element);
-                    this_ref.set_primitive(Primitive::Array(elements));
+                    this.borrow_mut().array_mut().unwrap().push(element);
                     runtime.nil()
                 }
 
                 fn pop() {
                     let mut this_ref = this.borrow_mut();
-                    let mut elements = this_ref.array().unwrap().clone();
-                    let element = elements.pop().ok_or(Index {
+                    let elements = this_ref.array_mut().unwrap();
+                    elements.pop().ok_or(Index {
                         error: "pop from empty list",
-                    })?;
-                    this_ref.set_primitive(Primitive::Array(elements));
-                    element
+                    })?
                 }
 
                 fn iter() {
                     let iter = runtime.create_object(runtime.builtins.ArrayIter.clone());
-                    iter.borrow_mut().set_property("array".into(), this.clone());
-                    iter.borrow_mut().set_property("index".into(), runtime.create_number(0.0));
+                    iter.borrow_mut().set_property("array", this.clone());
+                    iter.borrow_mut().set_property("index", runtime.create_number(0.0));
                     iter
                 }
             }
@@ -435,7 +431,7 @@ impl Runtime {
                         None,
                     )?;
                     if item != runtime.builtins.nil {
-                        this.borrow_mut().set_property("index".into(), runtime.create_number((index + 1) as f64));
+                        this.borrow_mut().set_property("index", runtime.create_number((index + 1) as f64));
                     }
                     item
                 }
@@ -487,7 +483,7 @@ impl Runtime {
                 fn to_s() {
                     let this_ref = this.borrow();
                     let dict = this_ref.dictionary().unwrap();
-                    let entries = dict
+                    let entries: Vec<_> = dict
                         .iter()
                         .map(|(key, value)| {
                             let value_obj = runtime.call_instance_method(
@@ -500,7 +496,7 @@ impl Runtime {
                             let value = value_ref.string().unwrap();
                             Ok(format!("    {key}: {value},"))
                         })
-                        .collect::<Result<Vec<String>>>()?;
+                        .try_collect()?;
                     let inner = if entries.is_empty() { ":".to_string() } else { format!("\n{}\n", entries.join("\n")) };
                     runtime.create_string(format!("[{inner}]"))
                 }

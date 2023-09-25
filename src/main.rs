@@ -6,6 +6,7 @@
 #![feature(map_try_insert)]
 #![feature(iter_array_chunks)]
 #![feature(iter_map_windows)]
+#![feature(iterator_try_collect)]
 
 use crate::parse::SourceParser;
 use crate::runtime::Runtime;

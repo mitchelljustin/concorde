@@ -96,7 +96,7 @@ impl Object {
     }
 
     pub fn __class__(&self) -> ObjectRef {
-        self.class.as_ref().unwrap().clone()
+        self.class.clone().unwrap()
     }
 
     pub fn get_init_method(&self) -> MethodRef {
@@ -163,8 +163,8 @@ impl Object {
         Some(value)
     }
 
-    pub fn set_property(&mut self, name: String, value: ObjectRef) {
-        self.properties.insert(name, value);
+    pub fn set_property(&mut self, name: impl Into<String>, value: ObjectRef) {
+        self.properties.insert(name.into(), value);
     }
 
     pub fn get_property(&self, name: &str) -> Option<ObjectRef> {

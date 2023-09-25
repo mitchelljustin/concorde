@@ -5,9 +5,8 @@ use crate::runtime::object::{
     MethodBody, MethodReceiver, MethodRef, ObjectRef, Param, DEFAULT_NAME,
 };
 use crate::runtime::Error::{
-    ArityMismatch, BadIterator, BadPath, DuplicateClassDefinition, IllegalAssignmentTarget,
-    NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ReturnFromInitializer,
-    ReturnFromMethod, UndefinedProperty,
+    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchProperty,
+    NoSuchVariable, NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -53,30 +52,27 @@ impl Runtime {
             Statement::Assignment(assignment) => return self.exec_assignment(assignment),
             Statement::ClassDefinition(class_def) => {
                 let name = class_def.v.name.v.name;
-                if self.resolve_variable(&name).is_some() {
-                    return Err(DuplicateClassDefinition {
-                        name,
-                        node: class_def.meta,
-                    });
-                }
-                let class = self.create_simple_class(name);
+
+                let class = self
+                    .resolve_variable(&name)
+                    .and_then(|object| self.is_class(&object).then_some(object))
+                    .unwrap_or_else(|| self.create_simple_class(name));
                 let stack_id = self.push_stack_frame(StackFrame {
                     class: Some(class),
                     ..StackFrame::default()
                 });
-                let mut result = Ok(());
-                for statement in class_def.v.body.v.statements {
-                    if let Err(error) = self.exec(statement) {
-                        result = Err(error);
-                        break;
-                    };
-                }
+                class_def
+                    .v
+                    .body
+                    .v
+                    .statements
+                    .into_iter()
+                    .try_for_each(|statement| self.exec(statement))?;
                 self.pop_stack_frame(stack_id);
-                return result;
             }
             Statement::ForIn(for_in) => return self.exec_for_in(for_in),
             Statement::WhileLoop(while_loop) => {
-                self.push_stack_frame(StackFrame::default());
+                let stack_id = self.push_stack_frame(StackFrame::default());
                 let mut result = Ok(());
                 loop {
                     let condition = self.eval(while_loop.v.condition.clone())?;
@@ -86,6 +82,7 @@ impl Runtime {
                     result = self.eval_block(while_loop.v.body.clone()).map(|_| ());
                     handle_loop_control_flow!(result);
                 }
+                self.pop_stack_frame(stack_id);
                 return result;
             }
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
@@ -436,7 +433,7 @@ impl Runtime {
     }
 
     fn is_falsy(&self, condition: &ObjectRef) -> bool {
-        condition == &self.builtins.bool_false || condition == &self.builtins.nil
+        [&self.builtins.bool_false, &self.builtins.nil].contains(&condition)
     }
 
     fn eval_access(&mut self, access: Node<Access>) -> Result<ObjectRef> {
@@ -579,7 +576,7 @@ impl Runtime {
         &mut self,
         exprs: impl IntoIterator<Item = Node<Expression>>,
     ) -> Result<Vec<ObjectRef>> {
-        exprs.into_iter().map(|node| self.eval(node)).collect()
+        exprs.into_iter().map(|node| self.eval(node)).try_collect()
     }
 
     fn eval_literal(&mut self, literal: Node<Literal>) -> Result<ObjectRef> {
@@ -598,7 +595,7 @@ impl Runtime {
                     .entries
                     .into_iter()
                     .map(|(key, value)| Ok((key.v.name, self.eval(value)?)))
-                    .collect::<Result<_>>()?;
+                    .try_collect()?;
                 Ok(self.create_dictionary(entries))
             }
         }
