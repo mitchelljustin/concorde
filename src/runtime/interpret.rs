@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 
 use crate::runtime::builtin;

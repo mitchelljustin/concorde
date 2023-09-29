@@ -26,6 +26,11 @@ class Number
 
 end
 
+class IntWrapper(value)
+    def to_s() = value.to_s()
+end
+
 use IO
-println(0.upto(10))
+println(0.upto(10, 10))
+println(IntWrapper(3))
 

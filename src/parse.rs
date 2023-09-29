@@ -27,7 +27,7 @@ pub enum Error {
     ClassHasTwoInitializers { class: String },
 }
 
-type Result<T = Node<AnyNodeVariant>, E = Error> = std::result::Result<T, E>;
+type Result<T = Node, E = Error> = std::result::Result<T, E>;
 
 #[derive(Parser)]
 #[grammar = "concorde.pest"]
@@ -90,59 +90,54 @@ impl SourceParser {
                 let mut inner = pair.clone().into_inner();
                 let name_pair = inner.next().unwrap();
                 let name = self.parse_ident(&name_pair)?;
-                let params_or_body = inner.next().unwrap();
+                let param_list = inner.next_if_rule(Rule::param_list);
+                let body = inner.next().unwrap();
+                let mut body = self.parse_block(body)?;
                 let fields;
-                let mut body;
-                match params_or_body.as_rule() {
-                    Rule::param_list => {
-                        fields = self.parse_list(params_or_body.clone(), Self::parse_param)?;
-                        body = self.parse_block(inner.next().unwrap())?;
-                        let has_init_method = body.v.statements.iter().any(|stmt| {
-                            let Statement::MethodDefinition(method_def) = &stmt.v else {
-                                return false;
-                            };
-                            method_def.v.name.v.name == builtin::method::init
+                if let Some(param_list) = param_list {
+                    fields = self.parse_list(param_list.clone(), Self::parse_param)?;
+                    let has_init_method = body.v.statements.iter().any(|stmt| {
+                        let Statement::MethodDefinition(method_def) = &stmt.v else {
+                            return false;
+                        };
+                        method_def.v.name.v.name == builtin::method::init
+                    });
+                    if has_init_method {
+                        return Err(ClassHasTwoInitializers {
+                            class: name.v.name.clone(),
                         });
-                        if has_init_method {
-                            return Err(ClassHasTwoInitializers {
-                                class: name.v.name.clone(),
-                            });
-                        }
-                        let init_source = fields
-                            .iter()
-                            .map(|field| {
-                                let name = field.v.name.v.name.clone();
-                                format!("self.{name} = {name}\n")
-                            })
-                            .collect::<Vec<String>>()
-                            .join("");
-                        let block = ConcordeParser::parse(Rule::stmts, &init_source)
-                            .unwrap()
-                            .next()
-                            .unwrap();
-                        let init_body = self.parse_block(block)?;
-                        body.v.statements.push(
-                            Statement::MethodDefinition(
-                                MethodDefinition {
-                                    name: Ident {
-                                        name: builtin::method::init.into(),
-                                    }
-                                    .into_node(&name_pair),
-                                    is_class_method: false,
-                                    parameters: fields.clone(),
-                                    body: init_body,
+                    }
+                    let init_source = fields
+                        .iter()
+                        .map(|field| {
+                            let name = field.v.name.v.name.clone();
+                            format!("self.{name} = {name}\n")
+                        })
+                        .collect::<Vec<String>>()
+                        .join("");
+                    let block = ConcordeParser::parse(Rule::stmts, &init_source)
+                        .unwrap()
+                        .next()
+                        .unwrap();
+                    let init_body = self.parse_block(block)?;
+                    body.v.statements.push(
+                        Statement::MethodDefinition(
+                            MethodDefinition {
+                                name: Ident {
+                                    name: builtin::method::init.into(),
                                 }
-                                .into_node(&params_or_body),
-                            )
-                            .into_node(&params_or_body),
+                                .into_node(&name_pair),
+                                is_class_method: false,
+                                parameters: fields.clone(),
+                                body: init_body,
+                            }
+                            .into_node(&param_list),
                         )
-                    }
-                    Rule::stmts => {
-                        fields = Vec::new();
-                        body = self.parse_block(params_or_body)?;
-                    }
-                    _ => unreachable!(),
-                };
+                        .into_node(&param_list),
+                    )
+                } else {
+                    fields = Vec::new();
+                }
                 Ok(Statement::ClassDefinition(
                     ClassDefinition { name, fields, body }.into_node(&pair),
                 )
