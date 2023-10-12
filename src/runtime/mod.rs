@@ -96,12 +96,7 @@ impl Runtime {
     }
 
     fn find_closest_in_stack<T>(&self, finder: impl Fn(&StackFrame) -> Option<&T>) -> Option<&T> {
-        for frame in self.stack.iter().rev() {
-            if let Some(found) = finder(frame) {
-                return Some(found);
-            }
-        }
-        None
+        self.stack.iter().rev().find_map(finder)
     }
 
     fn current_class(&self) -> ObjectRef {

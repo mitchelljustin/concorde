@@ -55,7 +55,7 @@ impl Runtime {
 
                 let class = self
                     .resolve_variable(&name)
-                    .and_then(|object| self.is_class(&object).then_some(object))
+                    .filter(|object| self.is_class(object))
                     .unwrap_or_else(|| self.create_simple_class(name));
                 let stack_id = self.push_stack_frame(StackFrame {
                     class: Some(class),

@@ -8,6 +8,7 @@
 #![feature(iter_map_windows)]
 #![feature(iterator_try_collect)]
 #![feature(yeet_expr)]
+#![feature(try_blocks)]
 
 use crate::parse::SourceParser;
 use crate::runtime::Runtime;

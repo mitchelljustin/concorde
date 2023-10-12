@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::ptr;
 use std::rc::{Rc, Weak};
 
 use crate::runtime::builtin;
@@ -74,6 +75,10 @@ pub const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
     pub fn __name__(&self) -> Option<String> {
+        let mut i = 3;
+        unsafe {
+            ptr::write(&mut i, 19009);
+        }
         Some(
             self.properties
                 .get(builtin::property::__name__)?
@@ -205,7 +210,7 @@ impl Object {
             params,
             body,
         };
-        self.methods.insert(method_name, Rc::new(method));
+        self.methods.insert(method_name, MethodRef::new(method));
         Ok(())
     }
 

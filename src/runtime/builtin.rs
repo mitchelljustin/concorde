@@ -2,50 +2,63 @@
 
 pub const SELF: &str = "self";
 
+macro define_string_consts($($name:ident,)+) {
+    $(
+        pub const $name: &str = stringify!($name);
+    )+
+}
+
 pub mod class {
-    pub const Class: &str = "Class";
-    pub const Object: &str = "Object";
-    pub const String: &str = "String";
-    pub const NilClass: &str = "NilClass";
-    pub const Main: &str = "Main";
-    pub const IO: &str = "IO";
-    pub const Bool: &str = "Bool";
-    pub const Number: &str = "Number";
-    pub const Dictionary: &str = "Dictionary";
-    pub const DictionaryIter: &str = "DictionaryIter";
-    pub const Array: &str = "Array";
-    pub const ArrayIter: &str = "ArrayIter";
+    use crate::runtime::builtin::define_string_consts;
+
+    define_string_consts![
+        Class,
+        Object,
+        String,
+        NilClass,
+        Main,
+        IO,
+        Bool,
+        Number,
+        Dictionary,
+        DictionaryIter,
+        Array,
+        ArrayIter,
+    ];
 }
 
 pub mod property {
-    pub const __name__: &str = "__name__";
-    pub const __class__: &str = "__class__";
+    use crate::runtime::builtin::define_string_consts;
+
+    define_string_consts![__name__, __class__,];
 }
 
 pub mod method {
-    pub const init: &str = "init";
-    pub const to_s: &str = "to_s";
-    pub const iter: &str = "iter";
-    pub const next: &str = "next";
+    use crate::runtime::builtin::define_string_consts;
+
+    define_string_consts![init, to_s, iter, next,];
 }
 
 pub mod op {
+    use crate::runtime::builtin::define_string_consts;
     use crate::types::Operator;
 
-    pub const __add__: &str = "__add__";
-    pub const __sub__: &str = "__sub__";
-    pub const __mul__: &str = "__mul__";
-    pub const __div__: &str = "__div__";
-    pub const __gt__: &str = "__gt__";
-    pub const __gte__: &str = "__gte__";
-    pub const __lt__: &str = "__lt__";
-    pub const __lte__: &str = "__lte__";
-    pub const __eq__: &str = "__eq__";
-    pub const __neq__: &str = "__neq__";
-    pub const __neg__: &str = "__neg__";
-    pub const __not__: &str = "__not__";
-    pub const __index__: &str = "__index__";
-    pub const __set_index__: &str = "__set_index__";
+    define_string_consts![
+        __add__,
+        __sub__,
+        __mul__,
+        __div__,
+        __gt__,
+        __gte__,
+        __lt__,
+        __lte__,
+        __eq__,
+        __neq__,
+        __neg__,
+        __not__,
+        __index__,
+        __set_index__,
+    ];
 
     pub fn method_for_assignment_op(op: &Operator) -> Option<&str> {
         Some(match op {

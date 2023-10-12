@@ -54,6 +54,8 @@ macro define_system_methods(
                 let params = vec![$(
                     Param::Positional(stringify!($param).into()),
                 )*];
+                #[allow(dead_code)]
+                fn $name() {}
                 class_mut.define_method(
                     MethodReceiver::Instance,
                     stringify!($name).into(),
@@ -271,30 +273,35 @@ impl Runtime {
                 }
 
                 fn trim() {
-                    let string = this.borrow().string().unwrap().clone();
+                    let this_ref = this.borrow();
+                    let string = this_ref.string().unwrap();
                     let result = string.trim();
                     runtime.create_string(result)
                 }
 
                 fn __eq__(other) {
-                    let result = this.borrow().string().unwrap() == other.borrow().string().unwrap();
+                    let this_ref = this.borrow();
+                    let result = this_ref.string().unwrap() == other.borrow().string().unwrap();
                     runtime.create_bool(result)
                 }
 
                 fn __neq__(other) {
-                    let result = this.borrow().string().unwrap() != other.borrow().string().unwrap();
+                    let this_ref = this.borrow();
+                    let result = this_ref.string().unwrap() != other.borrow().string().unwrap();
                     runtime.create_bool(result)
                 }
 
                 fn __add__(other) {
-                    let other_string =  runtime.call_instance_method(
+                    let other_string = runtime.call_instance_method(
                         other.clone(),
                         builtin::method::to_s,
                         None,
                         None,
-                    )?.borrow().string().unwrap().clone();
-                    let me = this.borrow().string().unwrap().clone();
-                    let result = me.add(&other_string);
+                    )?;
+                    let other_string_ref = other_string.borrow();
+                    let other_string = other_string_ref.string().unwrap();
+                    let mut result = this.borrow().string().unwrap().clone();
+                    result.push_str(other_string);
                     runtime.create_string(result)
                 }
 
