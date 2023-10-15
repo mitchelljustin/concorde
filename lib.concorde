@@ -2,6 +2,7 @@ class Enumerate(
   iter,
   index = 0,
 )
+  def iter() = self
   def next()
     item = self.iter.next()
     if item == nil then return nil
@@ -16,6 +17,7 @@ class Take(
   n,
   taken = 0,
 )
+  def iter() = self
   def next()
     if taken == n then return nil
     self.taken += 1
@@ -28,6 +30,7 @@ class Drop(
   n,
   dropped = 0,
 )
+  def iter() = self
   def next()
     while self.dropped < n
       iter.next()
@@ -41,10 +44,24 @@ class Map(
   iter,
   func,
 )
+  def iter() = self
   def next()
     item = iter.next()
     if item == nil then return nil
     func(item)
+  end
+end
+
+class Filter(
+  iter,
+  pred,
+)
+  def iter() = self
+  def next()
+    for item in iter
+      if pred(item) then return item
+    end
+    nil
   end
 end
 
@@ -53,6 +70,12 @@ class IterAdapter(iter)
   def take(n) = IterAdapter(Take(iter, n))
   def drop(n) = IterAdapter(Drop(iter, n))
   def map(func) = IterAdapter(Map(iter, func))
+  def filter(pred) = IterAdapter(Filter(iter, pred))
+  def each(func)
+    for item in self
+      func(item)
+    end
+  end
 
   def iter() = self
   def next() = iter.next()
@@ -104,6 +127,8 @@ class ArrayIter(
   end
 end
 
+pront = fn x -> IO::println(x) end
 
-double = fn x -> x * 2 end
-IO::println(double(5))
+Range::upto(20).iter().each(fn x -> do
+  pront(x)
+end)

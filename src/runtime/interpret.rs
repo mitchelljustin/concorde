@@ -12,8 +12,8 @@ use crate::runtime::Error::{
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, Assignment, Block, Call, Expression, ForIn, LValue, Literal, MethodDefinition, Node,
-    NodeMeta, Operator, Path, Program, Statement,
+    Access, AnyVariant, Assignment, Block, Call, Expression, ForIn, LValue, Literal,
+    MethodDefinition, Node, NodeMeta, Operator, Path, Program, Statement,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -376,7 +376,13 @@ impl Runtime {
                     .map(|var| Param::Positional(var.v.ident.v.name))
                     .collect();
                 let binding = self.create_tuple(binding_variables);
-                // TODO: capture variables from out
+                let closed_vars = Self::find_closed_vars_in_block(&closure.v.body.v);
+                for closed_var in closed_vars {
+                    let Some(var) = self.resolve_variable(&closed_var) else {
+                        continue;
+                    };
+                    object.borrow_mut().set_property(closed_var, var);
+                }
                 object
                     .borrow_mut()
                     .set_property(builtin::property::__binding__, binding);
@@ -388,6 +394,74 @@ impl Runtime {
                 )?;
                 Ok(object)
             }
+        }
+    }
+
+    fn find_closed_vars_in_block(block: &Block) -> Vec<String> {
+        block
+            .statements
+            .iter()
+            .flat_map(|stmt| Self::find_closed_vars_in_stmt(&stmt.v))
+            .collect()
+    }
+
+    fn find_closed_vars_in_stmt(stmt: &Statement) -> Vec<String> {
+        match stmt {
+            Statement::ForIn(for_in) => Self::find_closed_vars_in_expr(&for_in.v.iterable.v)
+                .into_iter()
+                .chain(Self::find_closed_vars_in_block(&for_in.v.body.v))
+                .collect(),
+            Statement::WhileLoop(while_loop) => {
+                Self::find_closed_vars_in_expr(&while_loop.v.condition.v)
+                    .into_iter()
+                    .chain(Self::find_closed_vars_in_block(&while_loop.v.body.v))
+                    .collect()
+            }
+            Statement::Expression(expression) => Self::find_closed_vars_in_expr(&expression.v),
+            Statement::Return(return_stmt) => return_stmt
+                .v
+                .retval
+                .as_ref()
+                .map(|expr| Self::find_closed_vars_in_expr(&expr.v))
+                .unwrap_or(Vec::new()),
+            Statement::Assignment(assignment) => {
+                Self::find_closed_vars_in_expr(&assignment.v.value.v)
+            }
+            Statement::MethodDefinition(_)
+            | Statement::ClassDefinition(_)
+            | Statement::Use(_)
+            | Statement::Break(_)
+            | Statement::Continue(_) => Vec::new(),
+        }
+    }
+
+    fn find_closed_vars_in_expr(expr: &Expression) -> Vec<String> {
+        match expr {
+            Expression::Index(index) => [&index.v.target, &index.v.index]
+                .iter()
+                .flat_map(|expr| Self::find_closed_vars_in_expr(&expr.v))
+                .collect(),
+            Expression::Access(access) => Self::find_closed_vars_in_expr(&access.v.target.v),
+            Expression::Call(call) => Self::find_closed_vars_in_expr(&call.v.target.v),
+            Expression::Variable(var) => {
+                vec![var.v.ident.v.name.clone()] // leaf
+            }
+            Expression::IfElse(if_else) => {
+                let mut vars = Self::find_closed_vars_in_expr(&if_else.v.condition.v);
+                vars.extend(Self::find_closed_vars_in_block(&if_else.v.then_body.v));
+                if let Some(block) = &if_else.v.else_body {
+                    vars.extend(Self::find_closed_vars_in_block(&block.v));
+                }
+                vars
+            }
+            Expression::Binary(binary) => [&binary.v.lhs.v, &binary.v.rhs.v]
+                .iter()
+                .flat_map(|expr| Self::find_closed_vars_in_expr(expr))
+                .collect(),
+            Expression::Unary(unary) => Self::find_closed_vars_in_expr(&unary.v.rhs.v),
+            Expression::Closure(closure) => Self::find_closed_vars_in_block(&closure.v.body.v),
+            Expression::Literal(_) => Vec::new(),
+            Expression::Path(_) => Vec::new(),
         }
     }
 
