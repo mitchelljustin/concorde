@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::ptr;
 use std::rc::{Rc, Weak};
 
 use crate::runtime::builtin;
@@ -74,11 +73,33 @@ impl PartialEq for Object {
 pub const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
+    pub fn new_dummy() -> ObjectRef {
+        Rc::new_cyclic(|weak_self| {
+            RefCell::new(Self {
+                class: None,
+                superclass: None,
+                primitive: None,
+                weak_self: weak_self.clone(),
+                properties: HashMap::new(),
+                methods: HashMap::new(),
+            })
+        })
+    }
+
+    pub fn new_of_class(class: ObjectRef) -> ObjectRef {
+        Rc::new_cyclic(|weak_self| {
+            RefCell::new(Self {
+                class: Some(class),
+                superclass: None,
+                primitive: None,
+                weak_self: weak_self.clone(),
+                properties: HashMap::new(),
+                methods: HashMap::new(),
+            })
+        })
+    }
+
     pub fn __name__(&self) -> Option<String> {
-        let mut i = 3;
-        unsafe {
-            ptr::write(&mut i, 19009);
-        }
         Some(
             self.properties
                 .get(builtin::property::__name__)?
@@ -236,33 +257,5 @@ impl Debug for Object {
             )
             .field("primitive", &self.primitive)
             .finish()
-    }
-}
-
-impl Object {
-    pub fn new_dummy() -> ObjectRef {
-        Rc::new_cyclic(|weak_self| {
-            RefCell::new(Self {
-                class: None,
-                superclass: None,
-                primitive: None,
-                weak_self: weak_self.clone(),
-                properties: HashMap::new(),
-                methods: HashMap::new(),
-            })
-        })
-    }
-
-    pub fn new_of_class(class: ObjectRef) -> ObjectRef {
-        Rc::new_cyclic(|weak_self| {
-            RefCell::new(Self {
-                class: Some(class),
-                superclass: None,
-                primitive: None,
-                weak_self: weak_self.clone(),
-                properties: HashMap::new(),
-                methods: HashMap::new(),
-            })
-        })
     }
 }

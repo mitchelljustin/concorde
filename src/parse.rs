@@ -27,7 +27,7 @@ pub enum Error {
     ClassHasTwoInitializers { class: String },
 }
 
-type Result<T = Node, E = Error> = std::result::Result<T, E>;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Parser)]
 #[grammar = "concorde.pest"]
@@ -403,7 +403,8 @@ impl SourceParser {
     fn parse_literal(&mut self, pair: Pair<Rule>) -> Result<Node<Literal>> {
         self.assert_rule(&pair, Rule::literal)?;
         let pair = pair.into_inner().next().unwrap();
-        match pair.as_rule() {
+        let rule = pair.as_rule();
+        match rule {
             Rule::nil => Ok(Literal::Nil(Nil {}.into_node(&pair)).into_node(&pair)),
             Rule::bool => Ok(Literal::Boolean(
                 Boolean {
@@ -424,8 +425,11 @@ impl SourceParser {
             )
             .into_node(&pair)),
             Rule::array => {
-                let expr_list = pair.clone().into_inner().next().unwrap();
-                let elements = self.parse_list(expr_list, Self::parse_expression)?;
+                let elements = if let Some(expr_list) = pair.clone().into_inner().next() {
+                    self.parse_list(expr_list, Self::parse_expression)?
+                } else {
+                    Vec::new()
+                };
                 Ok(Literal::Array(Array { elements }.into_node(&pair)).into_node(&pair))
             }
             Rule::dict => {

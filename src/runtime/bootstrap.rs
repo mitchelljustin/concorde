@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::Add;
 
 use crate::runtime::object::{MethodBody, MethodReceiver, Object, ObjectRef, Param, Primitive};
 use crate::runtime::Error::{ArityMismatch, IllegalConstructorCall, Index, TypeMismatch};

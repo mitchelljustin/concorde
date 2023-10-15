@@ -257,7 +257,8 @@ impl Runtime {
             .map(|param| Param::Positional(param.v.name.v.name.clone()))
             .collect();
         let body = MethodBody::User(method_def.v.body);
-        let receiver = if method_def.v.is_class_method {
+        let receiver = if method_def.v.is_class_method || self.current_class() == self.builtins.Main
+        {
             MethodReceiver::Class
         } else {
             MethodReceiver::Instance
@@ -296,7 +297,7 @@ impl Runtime {
                 let lhs = self.eval(*binary.v.lhs)?;
                 match op {
                     Operator::LogicalOr => {
-                        return Ok(if !self.is_falsy(&lhs) {
+                        return Ok(if self.is_truthy(&lhs) {
                             lhs
                         } else {
                             self.eval(*binary.v.rhs)?
@@ -430,6 +431,10 @@ impl Runtime {
             receiver = child_receiver;
         }
         Ok(receiver)
+    }
+
+    fn is_truthy(&self, condition: &ObjectRef) -> bool {
+        !self.is_falsy(condition)
     }
 
     fn is_falsy(&self, condition: &ObjectRef) -> bool {

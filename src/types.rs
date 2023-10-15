@@ -60,7 +60,7 @@ impl Display for NodeMeta {
 }
 
 #[derive(Debug, Clone)]
-pub struct Node<Variant: NodeVariant = AnyNodeVariant> {
+pub struct Node<Variant: NodeVariant> {
     pub meta: NodeMeta,
     pub v: Variant,
 }
@@ -103,8 +103,6 @@ pub enum Operator {
 impl NodeVariant for Operator {}
 
 define_node_types! {
-    [AnyNodeVariant]
-
     Ident {
         name: String,
     }
@@ -241,7 +239,6 @@ define_collector_enums! {
 }
 
 macro define_node_types(
-    [$any_node_name:ident]
 $(
     $name:ident {
         $(
@@ -259,13 +256,6 @@ $(
 
         impl NodeVariant for $name {}
     )+
-    define_collector_enums! {
-        $any_node_name {
-        $(
-            $name,
-        )+
-        }
-    }
 }
 
 macro define_collector_enums(

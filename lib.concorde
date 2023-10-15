@@ -18,6 +18,14 @@ class Range
         result
     end
 
+    def to_a()
+        a = []
+        for x in self
+            a.push(x)
+        end
+        a
+    end
+
     def to_s() = start.to_s() + ".." + (finish or "")
 end
 
@@ -31,6 +39,4 @@ class IntWrapper(value)
 end
 
 use IO
-println(0.upto(10))
-println(IntWrapper(3))
-
+println(Range(0, 16).to_a())
