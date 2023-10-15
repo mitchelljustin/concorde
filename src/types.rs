@@ -118,6 +118,9 @@ define_node_types! {
     Array {
         elements: Vec<Node<Expression>>,
     }
+    Tuple {
+        items: Vec<Node<Expression>>,
+    }
     Dictionary {
         entries: Vec<(Node<Ident>, Node<Expression>)>,
     }
@@ -131,7 +134,7 @@ define_node_types! {
         else_body: Option<Node<Block>>,
     }
     ForIn {
-        binding: Node<Variable>,
+        binding: Vec<Node<Variable>>,
         iterable: Node<Expression>,
         body: Node<Block>,
     }
@@ -190,6 +193,7 @@ define_node_types! {
     }
     Parameter {
         name: Node<Ident>,
+        default: Option<Node<Expression>>,
     }
     MethodDefinition {
         is_class_method: bool,
@@ -225,6 +229,7 @@ define_collector_enums! {
     }
     Literal {
         Array,
+        Tuple,
         Dictionary,
         StringLit,
         Number,

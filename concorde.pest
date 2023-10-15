@@ -38,10 +38,15 @@ use_stmt = {
 }
 
 for_in = {
-    "for" ~ variable ~ "in" ~ expr ~ (
+    "for" ~ binding ~ "in" ~ expr ~ (
         (NEWLINE ~ stmts ~ "end") | 
         ("do" ~ short_stmt)
     )
+}
+
+binding = {
+    variable |
+    "(" ~ variable ~ ("," ~ variable)+ ~ ")"
 }
 
 while_loop = {
@@ -78,11 +83,17 @@ param_list = {
 space = _{ NEWLINE *}
 
 param = {
-    ident
+    ident ~ ("=" ~ expr)?
 }
 
 assignment = {
     lvalue ~ op_assignment ~ expr
+}
+
+tuple = {
+    "(" ~ space ~ ")" |
+    "(" ~ space ~ expr ~ "," ~ space ~ ")" |
+    "(" ~ space ~ expr ~ ("," ~ space ~ expr)+ ~ ","? ~ space ~ ")"
 }
 
 op_assignment = _{
@@ -226,7 +237,7 @@ expr_list = {
 }
 
 literal = {
-    dict | array | number | string | bool | nil
+    dict | array | tuple | number | string | bool | nil
 }
 
 bool = @{ "true" | "false" }

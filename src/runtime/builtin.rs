@@ -23,7 +23,7 @@ pub mod class {
         Dictionary,
         DictionaryIter,
         Array,
-        ArrayIter,
+        Tuple,
     ];
 }
 

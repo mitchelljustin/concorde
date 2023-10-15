@@ -170,6 +170,14 @@ impl Runtime {
         array_obj
     }
 
+    pub fn create_tuple(&mut self, items: Vec<ObjectRef>) -> ObjectRef {
+        let tuple_obj = self.create_object(self.builtins.Tuple.clone());
+        tuple_obj
+            .borrow_mut()
+            .set_primitive(Primitive::Array(items));
+        tuple_obj
+    }
+
     pub fn create_dictionary(&mut self, entries: Vec<(String, ObjectRef)>) -> ObjectRef {
         let dict_obj = self.create_object(self.builtins.Dictionary.clone());
         dict_obj
@@ -226,15 +234,7 @@ impl Runtime {
     }
 
     pub fn assign_variable(&mut self, name: String, object: ObjectRef) {
-        let mut found_instance = false;
         for frame in self.stack.iter_mut().rev() {
-            if !found_instance && let Some(instance) = &frame.instance {
-                found_instance = true;
-                if instance.borrow().get_property(&name).is_some() {
-                    instance.borrow_mut().set_property(name, object);
-                    return;
-                }
-            }
             if frame.variables.contains_key(&name) {
                 frame.variables.insert(name.clone(), object.clone());
                 return;

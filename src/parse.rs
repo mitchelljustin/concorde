@@ -10,7 +10,7 @@ use crate::types::{
     Access, Array, Assignment, Binary, Block, Boolean, Break, Call, ClassDefinition, Continue,
     Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil,
     Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program, Return, Statement,
-    StringLit, TopError, Unary, Use, Variable, WhileLoop,
+    StringLit, TopError, Tuple, Unary, Use, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -107,11 +107,18 @@ impl SourceParser {
                             class: name.v.name.clone(),
                         });
                     }
+
                     let init_source = fields
                         .iter()
                         .map(|field| {
                             let name = field.v.name.v.name.clone();
-                            format!("self.{name} = {name}\n")
+                            let value = field
+                                .v
+                                .default
+                                .as_ref()
+                                .map(|default| default.meta.source.clone())
+                                .unwrap_or(name.clone());
+                            format!("self.{name} = {value}\n")
                         })
                         .collect::<Vec<String>>()
                         .join("");
@@ -120,6 +127,11 @@ impl SourceParser {
                         .next()
                         .unwrap();
                     let init_body = self.parse_block(block)?;
+                    let parameters = fields
+                        .iter()
+                        .filter(|field| field.v.default.is_none())
+                        .cloned()
+                        .collect();
                     body.v.statements.push(
                         Statement::MethodDefinition(
                             MethodDefinition {
@@ -128,7 +140,7 @@ impl SourceParser {
                                 }
                                 .into_node(&name_pair),
                                 is_class_method: false,
-                                parameters: fields.clone(),
+                                parameters,
                                 body: init_body,
                             }
                             .into_node(&param_list),
@@ -149,7 +161,7 @@ impl SourceParser {
             .into_node(&pair)),
             Rule::for_in => {
                 let [binding, iterable, body] = pair.clone().into_inner().next_chunk().unwrap();
-                let binding = self.parse_variable(binding)?;
+                let binding = self.parse_list(binding, Self::parse_variable)?;
                 let iterable = self.parse_expression(iterable)?;
                 let body = self.parse_stmts_or_short_stmt(body)?;
                 Ok(Statement::ForIn(
@@ -198,8 +210,14 @@ impl SourceParser {
     }
 
     fn parse_param(&mut self, pair: Pair<Rule>) -> Result<Node<Parameter>> {
+        let mut inner = pair.clone().into_inner();
+        let name = inner.next_if_rule(Rule::ident).unwrap();
+        let default = inner.next_if_rule(Rule::expr);
         Ok(Parameter {
-            name: self.parse_ident(&pair.clone().into_inner().next().unwrap())?,
+            name: self.parse_ident(&name)?,
+            default: default
+                .map(|pair| self.parse_expression(pair))
+                .transpose()?,
         }
         .into_node(&pair))
     }
@@ -444,6 +462,10 @@ impl SourceParser {
                     })
                     .try_collect()?;
                 Ok(Literal::Dictionary(Dictionary { entries }.into_node(&pair)).into_node(&pair))
+            }
+            Rule::tuple => {
+                let items = self.parse_list(pair.clone(), Self::parse_expression)?;
+                Ok(Literal::Tuple(Tuple { items }.into_node(&pair)).into_node(&pair))
             }
             rule => unreachable!("{:?}", rule),
         }

@@ -1,42 +1,96 @@
-
-class Range
-    def self::upto(finish) = self(0, finish)
-    def self::from(start) = self(start, nil)
-
-    def init(start, finish)
-        self.start = start
-        self.finish = finish
-        self.i = start
-    end
-
-    def iter() = self
-
-    def next()
-        if finish != nil and i >= finish then return nil
-        result = i
-        i += 1
-        result
-    end
-
-    def to_a()
-        a = []
-        for x in self
-            a.push(x)
-        end
-        a
-    end
-
-    def to_s() = start.to_s() + ".." + (finish or "")
+class Enumerate(
+  iter,
+  index = 0,
+)
+  def next()
+    item = self.iter.next()
+    if item == nil then return nil
+    index = self.index
+    self.index += 1
+    (index, item)
+  end
 end
 
-class Number
-    def upto(finish) = Range(self, finish)
-
+class Take(
+  iter,
+  n,
+  taken = 0,
+)
+  def next()
+    if taken == n then return nil
+    self.taken += 1
+    iter.next()
+  end
 end
 
-class IntWrapper(value)
-    def to_s() = value.to_s()
+class Drop(
+  iter,
+  n,
+  dropped = 0,
+)
+  def next()
+    if dropped == n then return self.iter.next()
+    self.dropped += 1
+
+  end
 end
 
-use IO
-println(Range(0, 16).to_a())
+class IterAdapter(iter)
+  def enumerate() = IterAdapter(Enumerate(iter))
+  def take(n) = IterAdapter(Take(iter, n))
+  def drop(n) = IterAdapter(Drop(iter, n))
+
+  def iter() = self
+  def next() = iter.next()
+  def to_a() = Array::from(self)
+end
+
+class Range(
+  start,
+  finish,
+  index = start,
+)
+  def self::upto(finish) = self(0, finish)
+  def self::from(start) = self(start, nil)
+
+  def iter() = IterAdapter(self)
+
+  def next()
+    if finish != nil and index >= finish then return nil
+    result = self.index
+    self.index += 1
+    result
+  end
+
+  def to_s() = start.to_s() + ".." + (finish or "")
+end
+
+class Array
+  def self::from(iter)
+    array = []
+    for item in iter
+      array.push(item)
+    end
+    array
+  end
+
+  def iter() = IterAdapter(ArrayIter(self))
+end
+
+
+class ArrayIter(
+  array,
+  index = 0,
+)
+  def next()
+    if self.index >= self.array.len() then return nil
+    item = self.array[self.index]
+    self.index += 1
+    item
+  end
+end
+
+
+arr = Range::upto(5).iter().to_a() + ["swag"]
+arr = arr.iter().enumerate().to_a()
+IO::println(arr)

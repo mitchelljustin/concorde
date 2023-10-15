@@ -85,15 +85,30 @@ define_builtins!(Builtins {
     Bool,
     Number,
     Array,
+    Tuple,
     Dictionary,
     DictionaryIter,
-    ArrayIter,
     IO,
     Main,
     bool_true,
     bool_false,
     nil,
 });
+
+fn object_list_to_string(
+    runtime: &mut Runtime,
+    objects: impl IntoIterator<Item = ObjectRef>,
+) -> Result<String> {
+    let strings: Vec<_> = objects
+        .into_iter()
+        .map(|object| {
+            runtime
+                .call_instance_method(object, builtin::method::to_s, None, None)
+                .map(|string| string.borrow().string().unwrap().to_string())
+        })
+        .try_collect()?;
+    Ok(strings.join(", "))
+}
 
 #[allow(non_snake_case)]
 impl Runtime {
@@ -138,7 +153,9 @@ impl Runtime {
 
         // create Array
         self.builtins.Array = self.create_simple_class(builtin::class::Array);
-        self.builtins.ArrayIter = self.create_simple_class(builtin::class::ArrayIter);
+
+        // create Tuple
+        self.builtins.Tuple = self.create_simple_class(builtin::class::Tuple);
 
         // create Dictionary
         self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary);
@@ -280,6 +297,9 @@ impl Runtime {
 
                 fn __eq__(other) {
                     let this_ref = this.borrow();
+                    if other.borrow().class != this_ref.class {
+                        return Ok(runtime.builtins.bool_false.clone());
+                    }
                     let result = this_ref.string().unwrap() == other.borrow().string().unwrap();
                     runtime.create_bool(result)
                 }
@@ -358,20 +378,10 @@ impl Runtime {
                 fn to_s() {
                     let this_ref = this.borrow();
                     let elements = this_ref.array().unwrap();
-                    let strings: Vec<_> = elements
-                        .iter()
-                        .cloned()
-                        .map(|object|
-                            runtime
-                                .call_instance_method(
-                                    object,
-                                    builtin::method::to_s,
-                                    None,
-                                    None,
-                                )
-                                .map(|string| string.borrow().string().unwrap().to_string()))
-                        .try_collect()?;
-                    let inner = strings.join(", ");
+                    let inner = object_list_to_string(
+                        runtime,
+                        elements.iter().cloned(),
+                    )?;
                     runtime.create_string(format!("[{inner}]"))
                 }
 
@@ -399,6 +409,18 @@ impl Runtime {
                     elements[index].clone()
                 }
 
+                fn __add__(other) {
+                    if other.borrow().__class__() != runtime.builtins.Array {
+                        return Err(TypeMismatch {
+                            class: other.borrow().__class__().borrow().__name__().unwrap(),
+                            expected: builtin::class::Array.into(),
+                        });
+                    }
+                    let [mut arr1, arr2] = [this, other].map(|obj| obj.borrow().array().unwrap().clone());
+                    arr1.extend(arr2);
+                    runtime.create_array(arr1)
+                }
+
                 fn init() {
                     this.borrow_mut().set_primitive(Primitive::Array(Default::default()));
                     this
@@ -417,29 +439,10 @@ impl Runtime {
                     })?
                 }
 
-                fn iter() {
-                    let iter = runtime.create_object(runtime.builtins.ArrayIter.clone());
-                    iter.borrow_mut().set_property("array", this.clone());
-                    iter.borrow_mut().set_property("index", runtime.create_number(0.0));
-                    iter
-                }
-            }
-
-            impl self.builtins.ArrayIter => {
-                fn next() {
-                    let index_obj = this.borrow().get_property("index").unwrap();
-                    let index = index_obj.borrow().number().unwrap() as usize;
-                    let array = this.borrow().get_property("array").unwrap();
-                    let item = runtime.call_instance_method(
-                        array,
-                        builtin::op::__index__,
-                        Some(index_obj),
-                        None,
-                    )?;
-                    if item != runtime.builtins.nil {
-                        this.borrow_mut().set_property("index", runtime.create_number((index + 1) as f64));
-                    }
-                    item
+                fn len() {
+                    let this_ref = this.borrow();
+                    let elements = this_ref.array().unwrap();
+                    runtime.create_number(elements.len() as _)
                 }
             }
 
@@ -507,6 +510,21 @@ impl Runtime {
                     runtime.create_string(format!("[{inner}]"))
                 }
             }
+
+            impl self.builtins.Tuple => {
+                fn to_s() {
+                    let this_ref = this.borrow();
+                    let items = this_ref.array().unwrap();
+                    let mut inner = object_list_to_string(
+                        runtime,
+                        items.iter().cloned(),
+                    )?;
+                    if items.len() == 1 {
+                        inner.push_str(",");
+                    }
+                    runtime.create_string(format!("({inner})"))
+                }
+            }
         );
 
         self.builtins
@@ -531,6 +549,22 @@ impl Runtime {
                 "println".into(),
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, _this, _method_name, args| {
+                    runtime.print_objects(args)?;
+                    println!();
+                    Ok(runtime.nil())
+                }),
+            )
+            .unwrap();
+
+        self.builtins
+            .IO
+            .borrow_mut()
+            .define_method(
+                MethodReceiver::Class,
+                "debug".into(),
+                vec![Param::Vararg("args".into())],
+                MethodBody::System(|runtime, _this, _method_name, args| {
+                    print!(">>> ");
                     runtime.print_objects(args)?;
                     println!();
                     Ok(runtime.nil())

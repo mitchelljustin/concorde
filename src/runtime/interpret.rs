@@ -107,7 +107,13 @@ impl Runtime {
     }
 
     fn exec_for_in(&mut self, for_in: Node<ForIn>) -> Result<()> {
-        let binding_name = for_in.v.binding.v.ident.v.name;
+        let node_meta = for_in.meta;
+        let binding_names: Vec<String> = for_in
+            .v
+            .binding
+            .into_iter()
+            .map(|var| var.v.ident.v.name)
+            .collect();
         let iterator_node = for_in.v.iterable.meta.clone();
         let iterable = self.eval(for_in.v.iterable)?;
         let iterable_class = iterable.borrow().__class__();
@@ -146,7 +152,28 @@ impl Runtime {
             if item == self.builtins.nil {
                 break;
             }
-            self.define_variable(binding_name.clone(), item);
+            if binding_names.len() == 1 {
+                self.define_variable(binding_names[0].clone(), item);
+            } else if item.borrow().__class__() == self.builtins.Tuple {
+                let item_ref = item.borrow();
+                let items = item_ref.array().expect("tuple without array");
+                if items.len() != binding_names.len() {
+                    return Err(BadIterator {
+                        reason: "iterator binding arity mismatch",
+                        node: node_meta.clone(),
+                    });
+                }
+                for (binding_name, value) in
+                    binding_names.iter().cloned().zip(items.iter().cloned())
+                {
+                    self.define_variable(binding_name, value)
+                }
+            } else {
+                return Err(BadIterator {
+                    reason: "iterator returned unbindable item",
+                    node: node_meta.clone(),
+                });
+            }
             result = self.eval_block(for_in.v.body.clone()).map(|_| ());
             handle_loop_control_flow!(result);
         }
@@ -592,6 +619,10 @@ impl Runtime {
             Literal::Array(array) => {
                 let elements = self.eval_expr_list(array.v.elements)?;
                 Ok(self.create_array(elements))
+            }
+            Literal::Tuple(tuple) => {
+                let items = self.eval_expr_list(tuple.v.items)?;
+                Ok(self.create_tuple(items))
             }
             Literal::Nil(_) => Ok(self.nil()),
             Literal::Dictionary(dictionary) => {
