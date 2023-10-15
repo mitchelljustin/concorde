@@ -84,6 +84,7 @@ define_builtins!(Builtins {
     NilClass,
     Bool,
     Number,
+    Closure,
     Array,
     Tuple,
     Dictionary,
@@ -176,6 +177,9 @@ impl Runtime {
 
         // create number
         self.builtins.Number = self.create_simple_class(builtin::class::Number);
+
+        // create Closure
+        self.builtins.Closure = self.create_simple_class(builtin::class::Closure);
 
         // create main
         self.builtins.Main = self.create_simple_class(builtin::class::Main);
@@ -568,6 +572,19 @@ impl Runtime {
                     runtime.print_objects(args)?;
                     println!();
                     Ok(runtime.nil())
+                }),
+            )
+            .unwrap();
+
+        self.builtins
+            .Closure
+            .borrow_mut()
+            .define_method(
+                MethodReceiver::Instance,
+                builtin::op::__call__.into(),
+                vec![Param::Vararg("args".into())],
+                MethodBody::System(|runtime, this, _method_name, args| {
+                    runtime.call_closure(this, args)
                 }),
             )
             .unwrap();

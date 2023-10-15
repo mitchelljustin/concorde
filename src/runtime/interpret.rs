@@ -6,7 +6,8 @@ use crate::runtime::object::{
 };
 use crate::runtime::Error::{
     ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchProperty,
-    NoSuchVariable, NotCallable, ReturnFromInitializer, ReturnFromMethod, UndefinedProperty,
+    NoSuchVariable, NotCallable, ObjectNotCallable, ReturnFromInitializer, ReturnFromMethod,
+    UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -359,32 +360,79 @@ impl Runtime {
                 self.call_instance_method(rhs, method_name, None, Some(unary.meta))
             }
             Expression::Path(path) => self.resolve_class_from_path(path),
+            Expression::Closure(closure) => {
+                let object = self.create_object(self.builtins.Closure.clone());
+                let binding_variables = closure
+                    .v
+                    .binding
+                    .iter()
+                    .cloned()
+                    .map(|var| self.create_string(var.v.ident.v.name))
+                    .collect();
+                let params = closure
+                    .v
+                    .binding
+                    .into_iter()
+                    .map(|var| Param::Positional(var.v.ident.v.name))
+                    .collect();
+                let binding = self.create_tuple(binding_variables);
+                // TODO: capture variables from out
+                object
+                    .borrow_mut()
+                    .set_property(builtin::property::__binding__, binding);
+                object.borrow_mut().define_method(
+                    MethodReceiver::Instance,
+                    builtin::op::__call__.into(),
+                    params,
+                    MethodBody::User(closure.v.body),
+                )?;
+                Ok(object)
+            }
         }
+    }
+
+    pub(crate) fn call_closure(
+        &mut self,
+        closure: ObjectRef,
+        arguments: Vec<ObjectRef>,
+    ) -> Result<ObjectRef> {
+        let method = closure
+            .borrow()
+            .resolve_own_method(builtin::op::__call__)
+            .expect("closure object has no __call__ method");
+        self.call_method(closure, method, arguments)
     }
 
     fn eval_call_expr(&mut self, call: Node<Call>) -> Result<ObjectRef> {
         let target = call.v.target;
-        let receiver;
-        let method;
-        match target.v {
+        let receiver: ObjectRef;
+        let method: MethodRef;
+        match &target.v {
             Expression::Variable(var) => {
-                let method_name = var.v.ident.v.name;
-                if let Some(class_var) = self.resolve_variable(&method_name) && self.is_class(&class_var) {
-                    receiver = self.create_object(class_var.clone());
-                    method = class_var.borrow().get_init_method();
-                } else if let Some((current_receiver, instance_method)) = self
-                    .current_instance()
-                    .and_then(|receiver|
+                let method_name = &var.v.ident.v.name;
+                if let Some(variable) = self.resolve_variable(method_name) {
+                    if self.is_class(&variable) {
+                        receiver = self.create_object(variable.clone());
+                        method = variable.borrow().get_init_method();
+                    } else {
+                        method = Self::resolve_callable_method(&variable, var.meta.clone())?;
+                        receiver = variable;
+                    }
+                } else if let Some((current_receiver, instance_method)) =
+                    self.current_instance().and_then(|receiver| {
                         receiver
                             .borrow()
                             .__class__()
                             .borrow()
                             .resolve_own_method(&method_name)
-                            .map(|method| (receiver.clone(), method))) {
+                            .map(|method| (receiver.clone(), method))
+                    })
+                {
                     receiver = current_receiver;
                     method = instance_method;
                 } else {
-                    let mut search_classes = self.stack
+                    let mut search_classes = self
+                        .stack
                         .iter()
                         .flat_map(|frame| frame.open_classes.iter())
                         .rev();
@@ -397,13 +445,14 @@ impl Runtime {
                         })
                         .ok_or(NoSuchMethod {
                             node: call.meta.into(),
-                            search: method_name,
+                            search: method_name.clone(),
                         })?;
                     receiver = found_class.clone();
                     method = found_method;
                 }
             }
-            Expression::Path(mut path) => {
+            Expression::Path(path) => {
+                let mut path = path.clone();
                 let method_component = path.v.components.pop().unwrap();
                 let method_name = method_component.v.ident.v.name;
                 let class_from_path = self.resolve_class_from_path(path)?;
@@ -425,10 +474,23 @@ impl Runtime {
                             })?;
                 };
             }
-            _ => return Err(NotCallable { node: target.meta }),
+            _ => {
+                let callable = self.eval(*target.clone())?;
+                method = Self::resolve_callable_method(&callable, target.meta)?;
+                receiver = callable;
+            }
         };
         let arguments = self.eval_expr_list(call.v.arguments)?;
         self.call_method(receiver, method, arguments)
+    }
+
+    fn resolve_callable_method(object: &ObjectRef, meta: NodeMeta) -> Result<MethodRef, Error> {
+        object
+            .borrow()
+            .__class__()
+            .borrow()
+            .resolve_own_method(builtin::op::__call__)
+            .ok_or(ObjectNotCallable { node: meta })
     }
 
     fn resolve_class_from_path(&self, path: Node<Path>) -> Result<ObjectRef> {

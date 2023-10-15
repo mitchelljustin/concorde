@@ -207,8 +207,15 @@ call = {
 
 primary = {
     literal |
+    closure |
     grouping |
     path
+}
+
+closure = {
+  "fn" ~ binding ~ "->" ~
+    (short_stmt | "do" ~ NEWLINE ~ stmts) ~
+  "end"
 }
 
 grouping = {
@@ -261,7 +268,8 @@ KEYWORD = @{
     "continue" |
     "return" |
     "then" |
-    "do"
+    "do" |
+    "fn"
 }
 
 ident = @{

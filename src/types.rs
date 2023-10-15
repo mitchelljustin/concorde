@@ -161,6 +161,10 @@ define_node_types! {
         target: Box<Node<Expression>>,
         member: Box<Node<Expression>>,
     }
+    Closure {
+        binding: Vec<Node<Variable>>,
+        body: Node<Block>,
+    }
     Assignment {
         target: Node<LValue>,
         op: Node<Operator>,
@@ -226,6 +230,7 @@ define_collector_enums! {
         IfElse,
         Binary,
         Unary,
+        Closure,
     }
     Literal {
         Array,

@@ -7,10 +7,10 @@ use pest_derive::Parser;
 use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
 use crate::runtime::builtin;
 use crate::types::{
-    Access, Array, Assignment, Binary, Block, Boolean, Break, Call, ClassDefinition, Continue,
-    Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue, Literal, MethodDefinition, Nil,
-    Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program, Return, Statement,
-    StringLit, TopError, Tuple, Unary, Use, Variable, WhileLoop,
+    Access, Array, Assignment, Binary, Block, Boolean, Break, Call, ClassDefinition, Closure,
+    Continue, Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
+    MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program,
+    Return, Statement, StringLit, TopError, Tuple, Unary, Use, Variable, WhileLoop,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -322,6 +322,7 @@ impl SourceParser {
                 }
                 Ok(expr)
             }
+            Rule::closure => self.parse_closure(pair),
             Rule::index => self.parse_index(pair),
             Rule::access => self.parse_access(pair),
             Rule::call => self.parse_call(&pair),
@@ -507,5 +508,12 @@ impl SourceParser {
             return Err(RuleMismatch { expected, actual });
         }
         Ok(())
+    }
+
+    fn parse_closure(&mut self, pair: Pair<Rule>) -> Result<Node<Expression>> {
+        let [binding, body] = pair.clone().into_inner().next_chunk().unwrap();
+        let binding = self.parse_list(binding, Self::parse_variable)?;
+        let body = self.parse_stmts_or_short_stmt(body)?;
+        Ok(Expression::Closure(Closure { binding, body }.into_node(&pair)).into_node(&pair))
     }
 }

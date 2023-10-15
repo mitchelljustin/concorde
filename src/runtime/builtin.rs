@@ -20,6 +20,7 @@ pub mod class {
         IO,
         Bool,
         Number,
+        Closure,
         Dictionary,
         DictionaryIter,
         Array,
@@ -30,7 +31,7 @@ pub mod class {
 pub mod property {
     use crate::runtime::builtin::define_string_consts;
 
-    define_string_consts![__name__, __class__,];
+    define_string_consts![__name__, __class__, __binding__,];
 }
 
 pub mod method {
@@ -58,6 +59,7 @@ pub mod op {
         __not__,
         __index__,
         __set_index__,
+        __call__,
     ];
 
     pub fn method_for_assignment_op(op: &Operator) -> Option<&str> {
