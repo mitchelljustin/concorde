@@ -45,8 +45,7 @@ for_in = {
 }
 
 binding = {
-    variable |
-    "(" ~ variable ~ ("," ~ variable)+ ~ ")"
+    variable ~ ("," ~ variable)*
 }
 
 while_loop = {
@@ -198,7 +197,7 @@ if_else = {
 // a.b() -> call(access(ident, ident))
 // a().b() -> call(access(call(ident), ident))
 access = {
-    call ~ ("." ~ call)*
+    call ~ (space ~ "." ~ call)*
 }
 
 call = {

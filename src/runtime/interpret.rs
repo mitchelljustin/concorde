@@ -1,3 +1,4 @@
+use crate::parse;
 use std::ops::ControlFlow;
 
 use crate::runtime::builtin;
@@ -12,8 +13,8 @@ use crate::runtime::Error::{
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
 use crate::types::{
-    Access, AnyVariant, Assignment, Block, Call, Expression, ForIn, LValue, Literal,
-    MethodDefinition, Node, NodeMeta, Operator, Path, Program, Statement,
+    Access, Assignment, Block, Call, Expression, ForIn, LValue, Literal, MethodDefinition, Node,
+    NodeMeta, Operator, Path, Program, Statement, TopError,
 };
 
 macro handle_loop_control_flow($result:ident) {
@@ -35,6 +36,11 @@ macro handle_loop_control_flow($result:ident) {
 }
 
 impl Runtime {
+    pub fn exec_file(&mut self, path: impl AsRef<std::path::Path>) -> Result<(), TopError> {
+        let program = parse::parse_file(path)?;
+        self.exec_program(program).map_err(From::from)
+    }
+
     pub fn exec_program(&mut self, program: Node<Program>) -> Result<()> {
         for statement in program.v.body.v.statements {
             self.exec(statement)?;
@@ -301,7 +307,7 @@ impl Runtime {
         match expression.v {
             Expression::Variable(var) => {
                 let name = &var.v.ident.v.name;
-                self.resolve_variable(name).ok_or(NoSuchVariable {
+                self.resolve_variable(name).ok_or_else(|| NoSuchVariable {
                     name: name.clone(),
                     node: var.meta,
                 })

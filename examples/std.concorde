@@ -1,3 +1,6 @@
+class PP(swag)
+end
+
 class Enumerate(
   iter,
   index = 0,
@@ -78,8 +81,22 @@ class IterAdapter(iter)
   end
 
   def iter() = self
-  def next() = iter.next()
+  def next() = self.iter.next()
   def to_a() = Array::from(self)
+end
+
+class RangeIter(
+  range,
+  index = range.start,
+)
+  def iter() = self
+
+  def next()
+    if range.finish != nil and index >= range.finish then return nil
+    result = self.index
+    self.index += 1
+    result
+  end
 end
 
 class Range(
@@ -90,14 +107,7 @@ class Range(
   def self::upto(finish) = self(0, finish)
   def self::from(start) = self(start, nil)
 
-  def iter() = IterAdapter(self)
-
-  def next()
-    if finish != nil and index >= finish then return nil
-    result = self.index
-    self.index += 1
-    result
-  end
+  def iter() = IterAdapter(RangeIter(self))
 
   def to_s() = start.to_s() + ".." + (finish or "")
 end
@@ -126,9 +136,3 @@ class ArrayIter(
     item
   end
 end
-
-pront = fn x -> IO::println(x) end
-
-Range::upto(20).iter().each(fn x -> do
-  pront(x)
-end)

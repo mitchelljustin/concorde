@@ -10,20 +10,20 @@
 #![feature(yeet_expr)]
 #![feature(try_blocks)]
 
-use crate::parse::SourceParser;
+use std::env::args;
+
 use crate::runtime::Runtime;
 use crate::types::TopError;
-use std::fs;
 
 mod parse;
 mod runtime;
 mod types;
 
 fn run() -> Result<(), TopError> {
+    let [_executable, filename] = args().next_chunk().unwrap_or_default();
     let mut runtime = Runtime::new();
-    let lib_source = fs::read_to_string("./lib.concorde")?;
-    let program = SourceParser::default().parse(&lib_source)?;
-    runtime.exec_program(program)?;
+    runtime.exec_file("./examples/std.concorde").unwrap();
+    runtime.exec_file(filename)?;
     Ok(())
 }
 

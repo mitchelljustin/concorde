@@ -250,11 +250,16 @@ impl Debug for Object {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Object")
             .field("ptr", &self.weak_self.as_ptr())
-            .field("class_ptr", &self.class.as_ref().map(Rc::as_ptr))
             .field(
                 "class_name",
-                &self.class.as_ref().map(|class| class.borrow().__name__()),
+                &self
+                    .class
+                    .as_ref()
+                    .map(|class| class.borrow().__name__().unwrap())
+                    .unwrap_or("N/A".to_string()),
             )
+            .field("methods", &self.methods)
+            .field("properties", &self.properties.keys().collect::<Vec<_>>())
             .field("primitive", &self.primitive)
             .finish()
     }
