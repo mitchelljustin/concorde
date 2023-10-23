@@ -25,13 +25,14 @@ pub mod class {
         DictionaryIter,
         Array,
         Tuple,
+        Method,
     ];
 }
 
 pub mod property {
     use crate::runtime::builtin::define_string_consts;
 
-    define_string_consts![__name__, __class__, __binding__,];
+    define_string_consts![__name__, __class__, __binding__, __receiver__,];
 }
 
 pub mod method {

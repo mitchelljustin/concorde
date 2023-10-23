@@ -438,11 +438,13 @@ fn parse_literal(pair: Pair<Rule>) -> Result<Node<Literal>> {
         )
         .into_node(&pair)),
         Rule::array => {
-            let elements = if let Some(expr_list) = pair.clone().into_inner().next() {
-                parse_list(expr_list, parse_expression)?
-            } else {
-                Vec::new()
-            };
+            let elements = pair
+                .clone()
+                .into_inner()
+                .next()
+                .map(|expr_list| parse_list(expr_list, parse_expression))
+                .transpose()?
+                .unwrap_or_default();
             Ok(Literal::Array(Array { elements }.into_node(&pair)).into_node(&pair))
         }
         Rule::dict => {

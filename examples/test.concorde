@@ -1,3 +1,5 @@
-for a, b in [(0, 1), (2, 3)]
-  IO::println(a, b)
-end
+Range(0, 100)
+  .iter()
+  .map(fn x -> (x, x * x) end)
+  .each(IO::println)
+

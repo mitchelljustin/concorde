@@ -85,6 +85,7 @@ define_builtins!(Builtins {
     Bool,
     Number,
     Closure,
+    Method,
     Array,
     Tuple,
     Dictionary,
@@ -157,6 +158,9 @@ impl Runtime {
 
         // create Tuple
         self.builtins.Tuple = self.create_simple_class(builtin::class::Tuple);
+
+        // create Method
+        self.builtins.Method = self.create_simple_class(builtin::class::Method);
 
         // create Dictionary
         self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary);
@@ -585,6 +589,31 @@ impl Runtime {
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, this, _method_name, args| {
                     runtime.call_closure(this, args)
+                }),
+            )
+            .unwrap();
+
+        self.builtins
+            .Method
+            .borrow_mut()
+            .define_method(
+                MethodReceiver::Instance,
+                builtin::op::__call__.into(),
+                vec![Param::Vararg("args".into())],
+                MethodBody::System(|runtime, this, _method_name, args| {
+                    let name = this
+                        .borrow()
+                        .get_property(builtin::property::__name__)
+                        .unwrap();
+                    let receiver = this
+                        .borrow()
+                        .get_property(builtin::property::__receiver__)
+                        .unwrap();
+                    let method = receiver
+                        .borrow()
+                        .resolve_own_method(&name.borrow().string().unwrap())
+                        .unwrap();
+                    runtime.call_method(receiver, method, args)
                 }),
             )
             .unwrap();

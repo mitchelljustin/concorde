@@ -95,7 +95,7 @@ impl Runtime {
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
             Statement::Continue(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
             Statement::Use(use_stmt) => {
-                let class = self.resolve_class_from_path(use_stmt.v.path)?;
+                let class = self.resolve_path(use_stmt.v.path)?;
                 self.stack.last_mut().unwrap().open_classes.push(class);
             }
             Statement::Return(return_stmt) => {
@@ -365,7 +365,7 @@ impl Runtime {
                 let method_name = builtin::op::method_for_unary_op(&unary.v.op.v).unwrap();
                 self.call_instance_method(rhs, method_name, None, Some(unary.meta))
             }
-            Expression::Path(path) => self.resolve_class_from_path(path),
+            Expression::Path(path) => self.resolve_path(path),
             Expression::Closure(closure) => {
                 let object = self.create_object(self.builtins.Closure.clone());
                 let binding_variables = closure
@@ -535,7 +535,7 @@ impl Runtime {
                 let mut path = path.clone();
                 let method_component = path.v.components.pop().unwrap();
                 let method_name = method_component.v.ident.v.name;
-                let class_from_path = self.resolve_class_from_path(path)?;
+                let class_from_path = self.resolve_path(path)?;
                 if let Some(class_prop) = class_from_path.borrow().get_property(&method_name) && self.is_class(&class_prop) {
                     receiver = self.create_object(class_prop.clone());
                     method = class_prop.borrow().get_init_method();
@@ -573,14 +573,28 @@ impl Runtime {
             .ok_or(ObjectNotCallable { node: meta })
     }
 
-    fn resolve_class_from_path(&self, path: Node<Path>) -> Result<ObjectRef> {
-        let (start_class, class_components) = path.v.components.split_first().unwrap();
+    fn create_method_object(&mut self, method: MethodRef) -> ObjectRef {
+        let method_obj = self.create_object(self.builtins.Method.clone());
+        method_obj.borrow_mut().set_property(
+            builtin::property::__receiver__,
+            method.class.upgrade().expect("method class was dropped"),
+        );
+        method_obj.borrow_mut().set_property(
+            builtin::property::__name__,
+            self.create_string(method.name.clone()),
+        );
+        method_obj
+    }
+
+    fn resolve_path(&mut self, path: Node<Path>) -> Result<ObjectRef> {
+        let (start_class, components) = path.v.components.split_first().unwrap();
+        let (final_component, middle_components) = components.split_last().unwrap();
         let receiver_name = &start_class.v.ident.v.name;
         let mut receiver = self.resolve_variable(receiver_name).ok_or(NoSuchVariable {
             name: receiver_name.clone(),
             node: start_class.meta.clone(),
         })?;
-        for component in class_components {
+        for component in middle_components {
             let member = &component.v.ident.v.name;
             let child_receiver =
                 receiver
@@ -599,7 +613,22 @@ impl Runtime {
             }
             receiver = child_receiver;
         }
-        Ok(receiver)
+        let final_member = &final_component.v.ident.v.name;
+        let object = receiver
+            .borrow()
+            .get_property(final_member)
+            .or_else(|| {
+                receiver
+                    .borrow()
+                    .resolve_own_method(final_member)
+                    .map(|method| self.create_method_object(method))
+            })
+            .ok_or(UndefinedProperty {
+                target: receiver.borrow().__debug__(),
+                member: final_member.clone(),
+                node: path.meta.clone(),
+            });
+        object
     }
 
     fn is_truthy(&self, condition: &ObjectRef) -> bool {
