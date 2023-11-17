@@ -90,6 +90,7 @@ pub enum Operator {
     Plus,
     Minus,
     Star,
+    Percent,
     Slash,
     PlusEqual,
     MinusEqual,
@@ -178,6 +179,9 @@ define_node_types! {
         target: Box<Node<Expression>>,
         arguments: Vec<Node<Expression>>,
     }
+    Binding {
+        variables: Vec<Node<Variable>>,
+    }
     Variable {
         ident: Node<Ident>,
     }
@@ -225,11 +229,11 @@ define_collector_enums! {
         Access,
         Call,
         Literal,
-        Variable,
         Path,
         IfElse,
         Binary,
         Unary,
+        Binding,
         Closure,
     }
     Literal {
@@ -242,9 +246,9 @@ define_collector_enums! {
         Nil,
     }
     LValue {
-        Variable,
         Access,
         Index,
+        Binding,
     }
 }
 

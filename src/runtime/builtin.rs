@@ -38,7 +38,7 @@ pub mod property {
 pub mod method {
     use crate::runtime::builtin::define_string_consts;
 
-    define_string_consts![init, to_s, iter, next,];
+    define_string_consts![init, to_s, iter, next, repr,];
 }
 
 pub mod op {
@@ -50,6 +50,7 @@ pub mod op {
         __sub__,
         __mul__,
         __div__,
+        __mod__,
         __gt__,
         __gte__,
         __lt__,
@@ -82,6 +83,7 @@ pub mod op {
             Operator::Less => __lt__,
             Operator::LessEqual => __lte__,
             Operator::Plus => __add__,
+            Operator::Percent => __mod__,
             Operator::Minus => __sub__,
             Operator::Star => __mul__,
             Operator::Slash => __div__,

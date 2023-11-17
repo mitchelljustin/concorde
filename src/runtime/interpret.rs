@@ -6,9 +6,10 @@ use crate::runtime::object::{
     MethodBody, MethodReceiver, MethodRef, ObjectRef, Param, DEFAULT_NAME,
 };
 use crate::runtime::Error::{
-    ArityMismatch, BadIterator, BadPath, IllegalAssignmentTarget, NoSuchMethod, NoSuchProperty,
-    NoSuchVariable, NotCallable, ObjectNotCallable, ReturnFromInitializer, ReturnFromMethod,
-    UndefinedProperty,
+    ArityMismatch, AssignmentRhsMustBeArrayOrTuple, BadIterator, BadPath,
+    IllegalAssignmentOperator, IllegalAssignmentTarget, IndexOutOfBounds, InvalidMember,
+    NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ObjectNotCallable,
+    ReturnFromInitializer, ReturnFromMethod, SyntaxError, TypeMismatch, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -95,7 +96,7 @@ impl Runtime {
             Statement::Break(_) => return Err(Error::ControlFlow(ControlFlow::Break(()))),
             Statement::Continue(_) => return Err(Error::ControlFlow(ControlFlow::Continue(()))),
             Statement::Use(use_stmt) => {
-                let class = self.resolve_path(use_stmt.v.path)?;
+                let class = self.resolve_class_from_path(use_stmt.v.path)?;
                 self.stack.last_mut().unwrap().open_classes.push(class);
             }
             Statement::Return(return_stmt) => {
@@ -149,18 +150,31 @@ impl Runtime {
         let stack_id = self.push_stack_frame(StackFrame::default());
         let mut result = Ok(());
         loop {
-            let item = match self.call_method(iterator.clone(), next_method.clone(), None) {
+            let next = match self.call_method(iterator.clone(), next_method.clone(), None) {
                 Ok(item) => item,
                 Err(error) => {
                     result = Err(error);
                     break;
                 }
             };
-            if item == self.builtins.nil {
+            let next_ref = next.borrow();
+            if next_ref.__class__() != self.builtins.Tuple {
+                return Err(BadIterator {
+                    reason: "iterator item must be a tuple (has_item, item)",
+                    node: node_meta.clone(),
+                });
+            }
+            let [has_item, item] = next_ref.array().unwrap().as_slice() else {
+                return Err(BadIterator {
+                    reason: "iterator item must be a tuple (has_item, item)",
+                    node: node_meta.clone(),
+                });
+            };
+            if self.is_falsy(has_item) {
                 break;
             }
             if binding_names.len() == 1 {
-                self.define_variable(binding_names[0].clone(), item);
+                self.define_variable(binding_names[0].clone(), item.clone());
             } else if item.borrow().__class__() == self.builtins.Tuple {
                 let item_ref = item.borrow();
                 let items = item_ref.array().expect("tuple without array");
@@ -192,28 +206,49 @@ impl Runtime {
         let mut value = self.eval(assignment.v.value);
         let assignment_op = builtin::op::method_for_assignment_op(&assignment.v.op.v);
         match assignment.v.target.v {
-            LValue::Variable(var) => {
-                let name = var.v.ident.v.name.clone();
+            LValue::Binding(mut binding) => {
                 if let Some(method_name) = assignment_op {
+                    if binding.v.variables.len() > 1 {
+                        return Err(IllegalAssignmentOperator {
+                            node: assignment.meta,
+                        });
+                    }
+                    let var = binding.v.variables.first().unwrap();
+                    let name = var.v.ident.v.name.clone();
                     let lhs = self.resolve_variable(&name).ok_or(NoSuchVariable {
                         name: name.clone(),
-                        node: var.meta,
+                        node: var.meta.clone(),
                     })?;
                     value = self.call_instance_method(
                         lhs,
                         method_name,
                         Some(value?),
-                        Some(assignment.meta),
+                        Some(assignment.meta.clone()),
                     );
                 }
-                self.assign_variable(name, value?);
+                let value = value?;
+                if binding.v.variables.len() > 1 {
+                    let value_ref = value.borrow();
+                    if ![&self.builtins.Array, &self.builtins.Tuple]
+                        .contains(&&value_ref.__class__())
+                    {
+                        return Err(AssignmentRhsMustBeArrayOrTuple {
+                            node: assignment.meta.clone(),
+                        });
+                    }
+                    let values = value_ref.array().unwrap();
+                    for (var, value) in binding.v.variables.into_iter().zip(values.iter()) {
+                        self.assign_variable(var.v.ident.v.name, value.clone());
+                    }
+                } else {
+                    let var = binding.v.variables.pop().unwrap();
+                    self.assign_variable(var.v.ident.v.name, value);
+                }
             }
             LValue::Access(access) => {
                 let target = self.eval(*access.v.target)?;
                 let Expression::Variable(member) = access.v.member.v else {
-                    return Err(IllegalAssignmentTarget {
-                        access: access.meta,
-                    });
+                    return Err(IllegalAssignmentTarget { node: access.meta });
                 };
                 let member = member.v.ident.v.name.clone();
                 if let Some(method_name) = assignment_op {
@@ -305,13 +340,6 @@ impl Runtime {
 
     pub fn eval(&mut self, expression: Node<Expression>) -> Result<ObjectRef> {
         match expression.v {
-            Expression::Variable(var) => {
-                let name = &var.v.ident.v.name;
-                self.resolve_variable(name).ok_or_else(|| NoSuchVariable {
-                    name: name.clone(),
-                    node: var.meta,
-                })
-            }
             Expression::Call(call) => self.eval_call_expr(call),
             Expression::Literal(literal) => self.eval_literal(literal),
             Expression::Access(access) => self.eval_access(access),
@@ -365,7 +393,19 @@ impl Runtime {
                 let method_name = builtin::op::method_for_unary_op(&unary.v.op.v).unwrap();
                 self.call_instance_method(rhs, method_name, None, Some(unary.meta))
             }
-            Expression::Path(path) => self.resolve_path(path),
+            Expression::Path(mut path) => {
+                let final_component = path.v.components.pop().unwrap();
+                let name = final_component.v.ident.v.name;
+                let node = path.meta.clone();
+                let class = self.resolve_class_from_path(path)?;
+                if let Some(object) = class.borrow().get_property(&name) {
+                    return Ok(object);
+                }
+                if let Some(method) = class.borrow().resolve_own_method(&name) {
+                    return Ok(self.create_method_object(method));
+                }
+                Err(NoSuchProperty { name, node })
+            }
             Expression::Closure(closure) => {
                 let object = self.create_object(self.builtins.Closure.clone());
                 let binding_variables = closure
@@ -399,6 +439,20 @@ impl Runtime {
                     MethodBody::User(closure.v.body),
                 )?;
                 Ok(object)
+            }
+            Expression::Binding(mut binding) => {
+                if binding.v.variables.len() > 1 {
+                    return Err(SyntaxError {
+                        reason: "multiple variables outside of lvalue context",
+                        node: binding.meta,
+                    });
+                }
+                let var = binding.v.variables.pop().unwrap();
+                let name = &var.v.ident.v.name;
+                self.resolve_variable(name).ok_or_else(|| NoSuchVariable {
+                    name: name.clone(),
+                    node: var.meta,
+                })
             }
         }
     }
@@ -449,7 +503,7 @@ impl Runtime {
                 .collect(),
             Expression::Access(access) => Self::find_closed_vars_in_expr(&access.v.target.v),
             Expression::Call(call) => Self::find_closed_vars_in_expr(&call.v.target.v),
-            Expression::Variable(var) => {
+            Expression::Binding(var) => {
                 vec![var.v.ident.v.name.clone()] // leaf
             }
             Expression::IfElse(if_else) => {
@@ -504,7 +558,7 @@ impl Runtime {
                             .borrow()
                             .__class__()
                             .borrow()
-                            .resolve_own_method(&method_name)
+                            .resolve_own_method(method_name)
                             .map(|method| (receiver.clone(), method))
                     })
                 {
@@ -535,8 +589,10 @@ impl Runtime {
                 let mut path = path.clone();
                 let method_component = path.v.components.pop().unwrap();
                 let method_name = method_component.v.ident.v.name;
-                let class_from_path = self.resolve_path(path)?;
-                if let Some(class_prop) = class_from_path.borrow().get_property(&method_name) && self.is_class(&class_prop) {
+                let class_from_path = self.resolve_class_from_path(path)?;
+                if let Some(class_prop) = class_from_path.borrow().get_property(&method_name)
+                    && self.is_class(&class_prop)
+                {
                     receiver = self.create_object(class_prop.clone());
                     method = class_prop.borrow().get_init_method();
                 } else {
@@ -573,28 +629,14 @@ impl Runtime {
             .ok_or(ObjectNotCallable { node: meta })
     }
 
-    fn create_method_object(&mut self, method: MethodRef) -> ObjectRef {
-        let method_obj = self.create_object(self.builtins.Method.clone());
-        method_obj.borrow_mut().set_property(
-            builtin::property::__receiver__,
-            method.class.upgrade().expect("method class was dropped"),
-        );
-        method_obj.borrow_mut().set_property(
-            builtin::property::__name__,
-            self.create_string(method.name.clone()),
-        );
-        method_obj
-    }
-
-    fn resolve_path(&mut self, path: Node<Path>) -> Result<ObjectRef> {
+    fn resolve_class_from_path(&mut self, path: Node<Path>) -> Result<ObjectRef> {
         let (start_class, components) = path.v.components.split_first().unwrap();
-        let (final_component, middle_components) = components.split_last().unwrap();
         let receiver_name = &start_class.v.ident.v.name;
         let mut receiver = self.resolve_variable(receiver_name).ok_or(NoSuchVariable {
             name: receiver_name.clone(),
             node: start_class.meta.clone(),
         })?;
-        for component in middle_components {
+        for component in components {
             let member = &component.v.ident.v.name;
             let child_receiver =
                 receiver
@@ -613,22 +655,7 @@ impl Runtime {
             }
             receiver = child_receiver;
         }
-        let final_member = &final_component.v.ident.v.name;
-        let object = receiver
-            .borrow()
-            .get_property(final_member)
-            .or_else(|| {
-                receiver
-                    .borrow()
-                    .resolve_own_method(final_member)
-                    .map(|method| self.create_method_object(method))
-            })
-            .ok_or(UndefinedProperty {
-                target: receiver.borrow().__debug__(),
-                member: final_member.clone(),
-                node: path.meta.clone(),
-            });
-        object
+        Ok(receiver)
     }
 
     fn is_truthy(&self, condition: &ObjectRef) -> bool {
@@ -661,6 +688,28 @@ impl Runtime {
                 let method_name = &var.v.ident.v.name;
                 self.call_instance_method(target, method_name, arguments, Some(call.meta))
             }
+            Expression::Literal(literal) => {
+                let Literal::Number(index) = literal.v else {
+                    return Err(InvalidMember { node: literal.meta });
+                };
+                if target.borrow().__class__() != self.builtins.Tuple {
+                    return Err(TypeMismatch {
+                        class: target.borrow().__class__().borrow().__name__().unwrap(),
+                        expected: builtin::class::Tuple.to_string(),
+                    });
+                }
+                let index = index.v.value as usize;
+                target
+                    .borrow()
+                    .array()
+                    .unwrap()
+                    .get(index)
+                    .ok_or(IndexOutOfBounds {
+                        node: access.meta,
+                        index,
+                    })
+                    .cloned()
+            }
             _ => unimplemented!(),
         }
     }
@@ -671,15 +720,6 @@ impl Runtime {
         method: MethodRef,
         arguments: impl IntoIterator<Item = ObjectRef>,
     ) -> Result<ObjectRef> {
-        debug_assert_eq!(
-            if self.is_class(&receiver) {
-                MethodReceiver::Class
-            } else {
-                MethodReceiver::Instance
-            },
-            method.receiver,
-            "method receiver type mismatch",
-        );
         let class = method.class.upgrade().expect("method's class was dropped");
         let method_name = method.name.clone();
         let arguments: Vec<ObjectRef> = arguments.into_iter().collect();

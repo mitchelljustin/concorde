@@ -1,5 +1,5 @@
-Range(0, 100)
-  .iter()
-  .map(fn x -> (x, x * x) end)
-  .each(IO::println)
-
+r = Range(1, 10)
+ok, item = r.iter().next()
+if ok
+  IO::println(item)
+end

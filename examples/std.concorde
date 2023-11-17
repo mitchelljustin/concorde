@@ -1,5 +1,5 @@
-class PP(swag)
-end
+def Some(x) = (true, x)
+None = (false, nil)
 
 class Enumerate(
   iter,
@@ -8,10 +8,10 @@ class Enumerate(
   def iter() = self
   def next()
     item = self.iter.next()
-    if item == nil then return nil
+    if item == nil then return None
     index = self.index
     self.index += 1
-    (index, item)
+    Some((index, item))
   end
 end
 
@@ -22,9 +22,9 @@ class Take(
 )
   def iter() = self
   def next()
-    if taken == n then return nil
+    if taken == n then return None
     self.taken += 1
-    iter.next()
+    Some(iter.next())
   end
 end
 
@@ -50,7 +50,7 @@ class Map(
   def iter() = self
   def next()
     item = iter.next()
-    if item == nil then return nil
+    if item == nil then return None
     func(item)
   end
 end
@@ -62,9 +62,25 @@ class Filter(
   def iter() = self
   def next()
     for item in iter
-      if pred(item) then return item
+      if pred(item) then return Some(item)
     end
-    nil
+    None
+  end
+end
+
+class Zip(
+  iter_lhs,
+  iter_rhs,
+)
+  def iter() = self
+  def next()
+    lhs = iter_lhs.next()
+    rhs = iter_rhs.next()
+    if lhs == nil or rhs == nil
+      None
+    else
+      Some((lhs, rhs))
+    end
   end
 end
 
@@ -74,6 +90,7 @@ class IterAdapter(iter)
   def drop(n) = IterAdapter(Drop(iter, n))
   def map(func) = IterAdapter(Map(iter, func))
   def filter(pred) = IterAdapter(Filter(iter, pred))
+  def zip(other_iter) = IterAdapter(Zip(iter, other_iter.iter()))
   def each(func)
     for item in self
       func(item)
@@ -92,10 +109,10 @@ class RangeIter(
   def iter() = self
 
   def next()
-    if range.finish != nil and index >= range.finish then return nil
+    if range.finish != nil and index >= range.finish then return None
     result = self.index
     self.index += 1
-    result
+    Some(result)
   end
 end
 
@@ -115,9 +132,7 @@ end
 class Array
   def self::from(iter)
     array = []
-    for item in iter
-      array.push(item)
-    end
+    iter.each(fn item -> array.push(item) end)
     array
   end
 
@@ -130,9 +145,21 @@ class ArrayIter(
   index = 0,
 )
   def next()
-    if self.index >= self.array.len() then return nil
+    if self.index >= self.array.len() then return None
     item = self.array[self.index]
     self.index += 1
-    item
+    Some(item)
   end
+end
+
+class String
+  def repr() = '"' + self + '"'
+end
+
+class Object
+  def repr() = self.to_s()
+end
+
+class Method
+  def to_s() = __receiver__.__name__ + "::" + __name__
 end

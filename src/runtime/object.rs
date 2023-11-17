@@ -218,9 +218,9 @@ impl Object {
                     .weak_self
                     .upgrade()
                     .expect("help i dont exist")
-                    .borrow()
-                    .__name__()
-                    .unwrap(),
+                    .try_borrow()
+                    .map(|c| c.__name__().unwrap())
+                    .unwrap_or("Class".to_string()),
                 name: method_name.clone(),
             });
         }

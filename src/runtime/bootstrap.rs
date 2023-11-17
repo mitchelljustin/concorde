@@ -105,7 +105,7 @@ fn object_list_to_string(
         .into_iter()
         .map(|object| {
             runtime
-                .call_instance_method(object, builtin::method::to_s, None, None)
+                .call_instance_method(object, builtin::method::repr, None, None)
                 .map(|string| string.borrow().string().unwrap().to_string())
         })
         .try_collect()?;
@@ -262,6 +262,11 @@ impl Runtime {
 
                 fn __neg__() {
                     let result = - this.borrow().number().unwrap();
+                    runtime.create_number(result)
+                }
+
+                fn __mod__(other) {
+                    let result = this.borrow().number().unwrap() % other.borrow().number().unwrap();
                     runtime.create_number(result)
                 }
 
@@ -458,6 +463,10 @@ impl Runtime {
                 fn to_s() {
                     runtime.create_string(this.borrow().__name__().unwrap())
                 }
+
+                fn repr() {
+                    runtime.create_string(this.borrow().__name__().unwrap())
+                }
             }
 
             impl self.builtins.Dictionary => {
@@ -497,6 +506,18 @@ impl Runtime {
                     runtime.nil()
                 }
 
+                fn entries() {
+                    let this_ref = this.borrow();
+                    let hash_map = this_ref.dictionary().unwrap();
+                    let keys: Vec<_> = hash_map.keys().map(|key| runtime.create_string(key)).collect();
+                    let entries = keys
+                        .into_iter()
+                        .zip(hash_map.values().cloned())
+                        .map(|(k, v)| runtime.create_tuple(vec![k, v]))
+                        .collect();
+                    runtime.create_array(entries)
+                }
+
                 fn to_s() {
                     let this_ref = this.borrow();
                     let dict = this_ref.dictionary().unwrap();
@@ -505,7 +526,7 @@ impl Runtime {
                         .map(|(key, value)| {
                             let value_obj = runtime.call_instance_method(
                                 value.clone(),
-                                builtin::method::to_s,
+                                builtin::method::repr,
                                 None,
                                 None,
                             )?;
@@ -528,7 +549,7 @@ impl Runtime {
                         items.iter().cloned(),
                     )?;
                     if items.len() == 1 {
-                        inner.push_str(",");
+                        inner.push(',');
                     }
                     runtime.create_string(format!("({inner})"))
                 }
@@ -611,12 +632,28 @@ impl Runtime {
                         .unwrap();
                     let method = receiver
                         .borrow()
-                        .resolve_own_method(&name.borrow().string().unwrap())
+                        .resolve_own_method(name.borrow().string().unwrap())
                         .unwrap();
                     runtime.call_method(receiver, method, args)
                 }),
             )
             .unwrap();
+
+        // self.builtins
+        //     .Class
+        //     .borrow_mut()
+        //     .define_method(
+        //         MethodReceiver::Class,
+        //         builtin::method::to_s.into(),
+        //         vec![],
+        //         MethodBody::System(|_runtime, this, _method_name, _args| {
+        //             Ok(this
+        //                 .borrow()
+        //                 .get_property(builtin::property::__name__)
+        //                 .unwrap())
+        //         }),
+        //     )
+        //     .unwrap();
     }
 
     fn print_objects(&mut self, args: Vec<ObjectRef>) -> Result<()> {

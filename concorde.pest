@@ -38,10 +38,9 @@ use_stmt = {
 }
 
 for_in = {
-    "for" ~ binding ~ "in" ~ expr ~ (
-        (NEWLINE ~ stmts ~ "end") | 
-        ("do" ~ short_stmt)
-    )
+    "for" ~ binding ~ "in" ~ expr ~ NEWLINE ~
+      stmts ~
+    "end"
 }
 
 binding = {
@@ -49,10 +48,9 @@ binding = {
 }
 
 while_loop = {
-    "while" ~ expr ~ (
-         (NEWLINE ~ stmts ~ "end") | 
-         ("do" ~ short_stmt)
-     )
+    "while" ~ expr ~ NEWLINE ~
+      stmts ~
+    "end"
 }
 
 class_method_spec = { "self::" }
@@ -138,7 +136,7 @@ factor = {
     logical_not ~ (op_factor ~ logical_not)*
 }
 
-op_factor = _{ op_star | op_slash }
+op_factor = _{ op_star | op_slash | op_percent }
 
 logical_not = {
     op_not* ~ unary_minus
@@ -162,6 +160,7 @@ op_lte = { "<=" }
 op_minus = { "-" }
 op_plus = { "+" }
 op_star = { "*" }
+op_percent = { "%" }
 op_slash = { "/" }
 op_minus_eq = { "-=" }
 op_plus_eq = { "+=" }
@@ -208,6 +207,7 @@ primary = {
     literal |
     closure |
     grouping |
+    binding |
     path
 }
 
@@ -285,7 +285,8 @@ integer = _{ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT }
 mantissa = _{ ASCII_DIGIT+ }
 
 string = @{
-    "\"" ~ string_inner ~ "\""
+    "\"" ~ string_inner ~ "\"" |
+    "'" ~ string_inner_single ~ "'"
 }
 
 array = {
@@ -303,6 +304,7 @@ dict_entry = _{
 }
 
 string_inner = ${(!"\"" ~ ANY)*}
+string_inner_single = ${(!"'" ~ ANY)*}
 
 WHITESPACE = _{ " " }
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }

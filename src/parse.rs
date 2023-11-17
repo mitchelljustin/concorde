@@ -8,8 +8,8 @@ use pest_derive::Parser;
 use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
 use crate::runtime::builtin;
 use crate::types::{
-    Access, Array, Assignment, Binary, Block, Boolean, Break, Call, ClassDefinition, Closure,
-    Continue, Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
+    Access, Array, Assignment, Binary, Binding, Block, Boolean, Break, Call, ClassDefinition,
+    Closure, Continue, Dictionary, Expression, ForIn, Ident, IfElse, Index, LValue, Literal,
     MethodDefinition, Nil, Node, NodeMeta, NodeVariant, Number, Operator, Parameter, Path, Program,
     Return, Statement, StringLit, TopError, Tuple, Unary, Use, Variable, WhileLoop,
 };
@@ -159,7 +159,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Node<Statement>> {
         }
         Rule::for_in => {
             let [binding, iterable, body] = pair.clone().into_inner().next_chunk().unwrap();
-            let binding = parse_list(binding, parse_variable)?;
+            let binding = parse_binding(binding)?;
             let iterable = parse_expression(iterable)?;
             let body = parse_stmts_or_short_stmt(body)?;
             Ok(Statement::ForIn(
@@ -203,6 +203,10 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Node<Statement>> {
         }
         rule => unreachable!("{:?}", rule),
     }
+}
+
+fn parse_binding(pair: Pair<Rule>) -> Result<Vec<Node<Variable>>, Error> {
+    parse_list(pair, parse_variable)
 }
 
 fn parse_param(pair: Pair<Rule>) -> Result<Node<Parameter>> {
@@ -258,6 +262,7 @@ fn parse_operator(pair: &Pair<Rule>) -> Node<Operator> {
         Rule::op_minus => Operator::Minus,
         Rule::op_plus => Operator::Plus,
         Rule::op_star => Operator::Star,
+        Rule::op_percent => Operator::Percent,
         Rule::op_slash => Operator::Slash,
         Rule::op_minus_eq => Operator::MinusEqual,
         Rule::op_plus_eq => Operator::PlusEqual,
@@ -295,6 +300,13 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Node<Expression>> {
         Rule::expr | Rule::primary | Rule::grouping => {
             parse_expression(pair.into_inner().next().unwrap())
         }
+        Rule::binding => Ok(Expression::Binding(
+            Binding {
+                variables: parse_list(pair.clone(), parse_variable)?,
+            }
+            .into_node(&pair),
+        )
+        .into_node(&pair)),
         Rule::logical_or
         | Rule::logical_and
         | Rule::equality
@@ -471,15 +483,32 @@ fn parse_literal(pair: Pair<Rule>) -> Result<Node<Literal>> {
 fn parse_lvalue(pair: Pair<Rule>) -> Result<Node<LValue>> {
     assert_rule(&pair, Rule::lvalue)?;
     let pair = pair.into_inner().next().unwrap();
-    assert_rule(&pair, Rule::index)?;
-    let lvalue = parse_index(pair.clone())?;
-    match lvalue.v {
-        Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
-        Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
-        Expression::Variable(var) => Ok(LValue::Variable(var).into_node(&pair)),
-        _ => Err(IllegalLValue {
-            lvalue: lvalue.meta,
-        }),
+    match pair.as_rule() {
+        Rule::binding => Ok(LValue::Binding(
+            Binding {
+                variables: parse_binding(pair.clone())?,
+            }
+            .into_node(&pair),
+        )
+        .into_node(&pair)),
+        Rule::index => {
+            let lvalue = parse_index(pair.clone())?;
+            match lvalue.v {
+                Expression::Index(index) => Ok(LValue::Index(index).into_node(&pair)),
+                Expression::Access(access) => Ok(LValue::Access(access).into_node(&pair)),
+                Expression::Variable(var) => Ok(LValue::Binding(
+                    Binding {
+                        variables: vec![var],
+                    }
+                    .into_node(&pair),
+                )
+                .into_node(&pair)),
+                _ => Err(IllegalLValue {
+                    lvalue: lvalue.meta,
+                }),
+            }
+        }
+        _ => unreachable!(),
     }
 }
 

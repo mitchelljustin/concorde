@@ -49,18 +49,31 @@ pub enum Error {
     },
     #[error("expression is not callable: {node}")]
     NotCallable { node: NodeMeta },
-    #[error("illegal assignment target: {access}")]
-    IllegalAssignmentTarget { access: NodeMeta },
+    #[error("invalid member: {node}")]
+    InvalidMember { node: NodeMeta },
+    #[error("illegal assignment target: {node}")]
+    IllegalAssignmentTarget { node: NodeMeta },
+    #[error("illegal assignment operator: {node}")]
+    IllegalAssignmentOperator { node: NodeMeta },
+    #[error("assignment rhs must be array or tuple: {node}")]
+    AssignmentRhsMustBeArrayOrTuple { node: NodeMeta },
     #[error("index error: {error}")]
     Index { error: &'static str },
     #[error("illegal constructor call: {class}")]
     IllegalConstructorCall { class: String },
     #[error("type error: expected {expected}, got {class}")]
     TypeMismatch { expected: String, class: String },
+    #[error("index out of bounds: {index} in {node}")]
+    IndexOutOfBounds { index: usize, node: NodeMeta },
     #[error("bad path contains non-class '{non_class}': {path}")]
     BadPath { non_class: String, path: NodeMeta },
     #[error("bad iterator, {reason}: {node}")]
     BadIterator {
+        reason: &'static str,
+        node: NodeMeta,
+    },
+    #[error("syntax error: {reason}: {node}")]
+    SyntaxError {
         reason: &'static str,
         node: NodeMeta,
     },
@@ -212,15 +225,30 @@ impl Runtime {
         self.create_class(name.into(), Some(self.builtins.Object.clone()))
     }
 
+    pub fn create_method_object(&mut self, method: MethodRef) -> ObjectRef {
+        let method_obj = self.create_object(self.builtins.Method.clone());
+        method_obj.borrow_mut().set_property(
+            builtin::property::__receiver__,
+            method.class.upgrade().expect("method class was dropped"),
+        );
+        method_obj.borrow_mut().set_property(
+            builtin::property::__name__,
+            self.create_string(method.name.clone()),
+        );
+        method_obj
+    }
+
     pub fn assign_global(&mut self, name: String, object: ObjectRef) {
         self.stack[0].variables.insert(name, object);
     }
 
-    pub fn resolve_variable(&self, name: &str) -> Option<ObjectRef> {
+    pub fn resolve_variable(&mut self, name: &str) -> Option<ObjectRef> {
         if name == builtin::SELF {
             return self.current_instance();
         }
         let mut found_instance = false;
+        let mut found_class = false;
+        let mut found_method = None;
         for frame in self.stack.iter().rev() {
             if let Some(value) = frame.variables.get(name) {
                 return Some(value.clone());
@@ -231,6 +259,17 @@ impl Runtime {
                     return Some(value.clone());
                 }
             }
+            if !found_class && let Some(class) = &frame.class {
+                found_class = true;
+                let class_ref = class.borrow();
+                if let Some(method) = class_ref.resolve_own_method(name) {
+                    found_method = Some(method);
+                    break;
+                }
+            }
+        }
+        if let Some(method) = found_method {
+            return Some(self.create_method_object(method));
         }
         None
     }
