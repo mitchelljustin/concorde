@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::ops::ControlFlow;
 use std::rc::{Rc, Weak};
 
@@ -75,7 +76,7 @@ pub enum Error {
     #[error("syntax error: {reason}: {node}")]
     SyntaxError {
         reason: &'static str,
-        node: NodeMeta,
+        node: MaybeNodeMeta,
     },
 }
 
@@ -87,8 +88,30 @@ pub struct StackFrame {
     instance: Option<ObjectRef>,
     class: Option<ObjectRef>,
     _method: Option<MethodRef>,
+    _context: &'static str,
     open_classes: Vec<ObjectRef>,
     variables: HashMap<String, ObjectRef>,
+}
+
+impl Display for StackFrame {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            id,
+            _context,
+            _method,
+            instance,
+            ..
+        } = self;
+        let method = _method
+            .as_ref()
+            .map(|method| method.name.clone())
+            .unwrap_or("".to_string());
+        let instance = instance
+            .as_ref()
+            .map(|instance| instance.borrow().__class__().borrow().__name__().unwrap())
+            .unwrap_or("".to_string());
+        write!(f, "#({id} {_context} {instance}::{method})")
+    }
 }
 
 #[derive(Default)]

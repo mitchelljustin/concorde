@@ -5,7 +5,7 @@ use pest::iterators::{Pair, Pairs};
 use pest::{Parser, RuleType};
 use pest_derive::Parser;
 
-use crate::parse::Error::{ClassHasTwoInitializers, IllegalLValue, RuleMismatch};
+use crate::parse::Error::{ClassHasTwoInitializers, IllegalBinding, IllegalLValue, RuleMismatch};
 use crate::runtime::builtin;
 use crate::types::{
     Access, Array, Assignment, Binary, Binding, Block, Boolean, Break, Call, ClassDefinition,
@@ -26,6 +26,8 @@ pub enum Error {
     RuleMismatch { expected: Rule, actual: Rule },
     #[error("class cannot both have fields and an initializer method: '{class}'")]
     ClassHasTwoInitializers { class: String },
+    #[error("syntax error, illegal multi-variable binding expression: '{node}'")]
+    IllegalBinding { node: NodeMeta },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -51,11 +53,42 @@ pub fn parse_file(path: impl AsRef<std::path::Path>) -> Result<Node<Program>, To
     parse_source(&source)
 }
 
+pub fn pretty_print_pair(mut pair: Pair<Rule>, indent_level: usize) {
+    let source = pair.as_str();
+    let first_rule = pair.as_rule();
+    let indent = "| ".repeat(indent_level);
+    let mut rules = vec![first_rule];
+    let mut inner: Vec<Pair<Rule>>;
+    loop {
+        inner = pair.clone().into_inner().collect();
+        if inner.len() != 1 {
+            break;
+        }
+        let sub_pair = &inner[0];
+        if sub_pair.as_str() != source {
+            break;
+        }
+        rules.push(sub_pair.as_rule());
+        pair = sub_pair.clone();
+    }
+    let rule_prefix = rules
+        .into_iter()
+        .map(|rule| format!("{rule:?}"))
+        .collect::<Vec<_>>()
+        .join(" > ");
+    let source_no_newlines = source.replace('\n', " \\n ");
+    println!("{indent}{rule_prefix} '{source_no_newlines}'");
+    for sub_pair in inner {
+        pretty_print_pair(sub_pair, indent_level + 1);
+    }
+}
+
 pub fn parse_source(source: &str) -> Result<Node<Program>, TopError> {
     let pair = ConcordeParser::parse(Rule::program, source)
         .map_err(|err| Error::Pest(Box::new(err)))?
         .next()
         .unwrap();
+    pretty_print_pair(pair.clone(), 0);
     let body = parse_block(pair.clone().into_inner().next().unwrap())?;
     Ok(Program { body }.into_node(&pair))
 }
@@ -300,13 +333,16 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Node<Expression>> {
         Rule::expr | Rule::primary | Rule::grouping => {
             parse_expression(pair.into_inner().next().unwrap())
         }
-        Rule::binding => Ok(Expression::Binding(
-            Binding {
-                variables: parse_list(pair.clone(), parse_variable)?,
+        Rule::binding => {
+            let mut pairs = pair.clone().into_inner().collect::<Vec<_>>();
+            if pairs.len() > 1 {
+                return Err(IllegalBinding {
+                    node: (&pair).into(),
+                });
             }
-            .into_node(&pair),
-        )
-        .into_node(&pair)),
+            let var_pair = pairs.pop().unwrap().clone();
+            Ok(Expression::Variable(parse_variable(var_pair)?).into_node(&pair))
+        }
         Rule::logical_or
         | Rule::logical_and
         | Rule::equality
@@ -484,13 +520,21 @@ fn parse_lvalue(pair: Pair<Rule>) -> Result<Node<LValue>> {
     assert_rule(&pair, Rule::lvalue)?;
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
-        Rule::binding => Ok(LValue::Binding(
-            Binding {
-                variables: parse_binding(pair.clone())?,
-            }
-            .into_node(&pair),
-        )
-        .into_node(&pair)),
+        Rule::tuple => {
+            let variables = parse_list(pair.clone(), parse_expression)?
+                .into_iter()
+                .map(|expr| {
+                    let Expression::Variable(var) = expr.v else {
+                        return Err(IllegalBinding {
+                            node: (&pair).into(),
+                        });
+                    };
+                    Ok(var)
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(LValue::Binding(Binding { variables }.into_node(&pair)).into_node(&pair))
+        }
         Rule::index => {
             let lvalue = parse_index(pair.clone())?;
             match lvalue.v {

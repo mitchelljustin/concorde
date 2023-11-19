@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io;
 
 use pest::iterators::Pair;
+use pest::RuleType;
 
 use crate::parse::Rule;
 use crate::{parse, runtime};
@@ -65,14 +66,20 @@ pub struct Node<Variant: NodeVariant> {
     pub v: Variant,
 }
 
+impl From<&Pair<'_, Rule>> for NodeMeta {
+    fn from(pair: &Pair<Rule>) -> Self {
+        Self {
+            source: pair.as_str().to_string(),
+            rule: pair.as_rule(),
+            line_col: pair.line_col(),
+        }
+    }
+}
+
 pub trait NodeVariant: Sized + Debug + Clone {
     fn into_node(self, pair: &Pair<Rule>) -> Node<Self> {
         Node {
-            meta: NodeMeta {
-                source: pair.as_str().to_string(),
-                rule: pair.as_rule(),
-                line_col: pair.line_col(),
-            },
+            meta: pair.into(),
             v: self,
         }
     }
@@ -233,8 +240,8 @@ define_collector_enums! {
         IfElse,
         Binary,
         Unary,
-        Binding,
         Closure,
+        Variable,
     }
     Literal {
         Array,

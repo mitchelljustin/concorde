@@ -1,6 +1,6 @@
-use crate::parse;
 use std::ops::ControlFlow;
 
+use crate::parse;
 use crate::runtime::builtin;
 use crate::runtime::object::{
     MethodBody, MethodReceiver, MethodRef, ObjectRef, Param, DEFAULT_NAME,
@@ -9,7 +9,7 @@ use crate::runtime::Error::{
     ArityMismatch, AssignmentRhsMustBeArrayOrTuple, BadIterator, BadPath,
     IllegalAssignmentOperator, IllegalAssignmentTarget, IndexOutOfBounds, InvalidMember,
     NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ObjectNotCallable,
-    ReturnFromInitializer, ReturnFromMethod, SyntaxError, TypeMismatch, UndefinedProperty,
+    ReturnFromInitializer, ReturnFromMethod, TypeMismatch, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -67,6 +67,7 @@ impl Runtime {
                     .unwrap_or_else(|| self.create_simple_class(name));
                 let stack_id = self.push_stack_frame(StackFrame {
                     class: Some(class),
+                    _context: "class definition",
                     ..StackFrame::default()
                 });
                 class_def
@@ -80,7 +81,10 @@ impl Runtime {
             }
             Statement::ForIn(for_in) => return self.exec_for_in(for_in),
             Statement::WhileLoop(while_loop) => {
-                let stack_id = self.push_stack_frame(StackFrame::default());
+                let stack_id = self.push_stack_frame(StackFrame {
+                    _context: "while loop",
+                    ..StackFrame::default()
+                });
                 let mut result = Ok(());
                 loop {
                     let condition = self.eval(while_loop.v.condition.clone())?;
@@ -147,7 +151,10 @@ impl Runtime {
             });
         };
 
-        let stack_id = self.push_stack_frame(StackFrame::default());
+        let stack_id = self.push_stack_frame(StackFrame {
+            _context: "for-in loop",
+            ..StackFrame::default()
+        });
         let mut result = Ok(());
         loop {
             let next = match self.call_method(iterator.clone(), next_method.clone(), None) {
@@ -159,18 +166,20 @@ impl Runtime {
             };
             let next_ref = next.borrow();
             if next_ref.__class__() != self.builtins.Tuple {
-                return Err(BadIterator {
-                    reason: "iterator item must be a tuple (has_item, item)",
+                result = Err(BadIterator {
+                    reason: "iterator item must be a tuple (ok, item)",
                     node: node_meta.clone(),
                 });
+                break;
             }
-            let [has_item, item] = next_ref.array().unwrap().as_slice() else {
-                return Err(BadIterator {
-                    reason: "iterator item must be a tuple (has_item, item)",
+            let [ok, item] = next_ref.array().unwrap().as_slice() else {
+                result = Err(BadIterator {
+                    reason: "iterator item must be a tuple (ok, item)",
                     node: node_meta.clone(),
                 });
+                break;
             };
-            if self.is_falsy(has_item) {
+            if self.is_falsy(ok) {
                 break;
             }
             if binding_names.len() == 1 {
@@ -179,10 +188,11 @@ impl Runtime {
                 let item_ref = item.borrow();
                 let items = item_ref.array().expect("tuple without array");
                 if items.len() != binding_names.len() {
-                    return Err(BadIterator {
+                    result = Err(BadIterator {
                         reason: "iterator binding arity mismatch",
                         node: node_meta.clone(),
                     });
+                    break;
                 }
                 for (binding_name, value) in
                     binding_names.iter().cloned().zip(items.iter().cloned())
@@ -190,10 +200,11 @@ impl Runtime {
                     self.define_variable(binding_name, value)
                 }
             } else {
-                return Err(BadIterator {
+                result = Err(BadIterator {
                     reason: "iterator returned unbindable item",
                     node: node_meta.clone(),
                 });
+                break;
             }
             result = self.eval_block(for_in.v.body.clone()).map(|_| ());
             handle_loop_control_flow!(result);
@@ -297,20 +308,27 @@ impl Runtime {
         Ok(())
     }
 
-    fn pop_stack_frame(&mut self, stack_id: usize) {
-        let stack_frame = self.stack.pop().unwrap();
-        debug_assert_eq!(
-            stack_frame.id, stack_id,
-            "popping a different stack frame than was pushed"
-        );
-    }
-
     fn push_stack_frame(&mut self, mut stack_frame: StackFrame) -> usize {
         let stack_id = self.stack_id;
         self.stack_id += 1;
         stack_frame.id = stack_id;
+        // println!("++ {stack_frame}");
         self.stack.push(stack_frame);
+        // for frame in &self.stack {
+        //     println!("    {frame}");
+        // }
         stack_id
+    }
+
+    fn pop_stack_frame(&mut self, stack_id: usize) {
+        let stack_frame = self.stack.pop().unwrap();
+        // println!("-- {stack_frame}");
+        // for (i, frame) in self.stack.iter().enumerate() {
+        //     println!("     {i}. {frame}");
+        // }
+        if stack_frame.id != stack_id {
+            eprintln!("WARNING: popping a different stack frame than was pushed");
+        }
     }
 
     fn exec_method_def(
@@ -440,14 +458,7 @@ impl Runtime {
                 )?;
                 Ok(object)
             }
-            Expression::Binding(mut binding) => {
-                if binding.v.variables.len() > 1 {
-                    return Err(SyntaxError {
-                        reason: "multiple variables outside of lvalue context",
-                        node: binding.meta,
-                    });
-                }
-                let var = binding.v.variables.pop().unwrap();
+            Expression::Variable(var) => {
                 let name = &var.v.ident.v.name;
                 self.resolve_variable(name).ok_or_else(|| NoSuchVariable {
                     name: name.clone(),
@@ -503,8 +514,8 @@ impl Runtime {
                 .collect(),
             Expression::Access(access) => Self::find_closed_vars_in_expr(&access.v.target.v),
             Expression::Call(call) => Self::find_closed_vars_in_expr(&call.v.target.v),
-            Expression::Binding(var) => {
-                vec![var.v.ident.v.name.clone()] // leaf
+            Expression::Variable(variable) => {
+                vec![variable.v.ident.v.name.clone()] // leaf
             }
             Expression::IfElse(if_else) => {
                 let mut vars = Self::find_closed_vars_in_expr(&if_else.v.condition.v);
@@ -747,6 +758,7 @@ impl Runtime {
                     .collect();
                 let stack_id = self.push_stack_frame(StackFrame {
                     instance: Some(receiver.clone()),
+                    _context: "method call",
                     _method: Some(method.clone()),
                     variables,
                     ..StackFrame::default()

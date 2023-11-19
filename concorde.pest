@@ -77,7 +77,7 @@ param_list = {
     ("(" ~ space ~ param ~ (space ~ "," ~ space ~ param)* ~ space ~ ","? ~ space ~ ")")
 }
 
-space = _{ NEWLINE *}
+space = _{ NEWLINE* }
 
 param = {
     ident ~ ("=" ~ expr)?
@@ -207,7 +207,6 @@ primary = {
     literal |
     closure |
     grouping |
-    binding |
     path
 }
 
@@ -222,6 +221,7 @@ grouping = {
 }
 
 lvalue = {
+    tuple |
     index
 }
 

@@ -7,8 +7,8 @@ class Enumerate(
 )
   def iter() = self
   def next()
-    item = self.iter.next()
-    if item == nil then return None
+    (ok, item) = self.iter.next()
+    if not ok then return None
     index = self.index
     self.index += 1
     Some((index, item))
@@ -24,7 +24,7 @@ class Take(
   def next()
     if taken == n then return None
     self.taken += 1
-    Some(iter.next())
+    iter.next()
   end
 end
 
@@ -49,9 +49,9 @@ class Map(
 )
   def iter() = self
   def next()
-    item = iter.next()
-    if item == nil then return None
-    func(item)
+    (ok, item) = iter.next()
+    if not ok then return None
+    Some(func(item))
   end
 end
 
@@ -74,9 +74,9 @@ class Zip(
 )
   def iter() = self
   def next()
-    lhs = iter_lhs.next()
-    rhs = iter_rhs.next()
-    if lhs == nil or rhs == nil
+    (ok_lhs, lhs) = iter_lhs.next()
+    (ok_rhs, rhs) = iter_rhs.next()
+    if not ok_lhs or not ok_rhs
       None
     else
       Some((lhs, rhs))
@@ -84,13 +84,13 @@ class Zip(
   end
 end
 
-class IterAdapter(iter)
-  def enumerate() = IterAdapter(Enumerate(iter))
-  def take(n) = IterAdapter(Take(iter, n))
-  def drop(n) = IterAdapter(Drop(iter, n))
-  def map(func) = IterAdapter(Map(iter, func))
-  def filter(pred) = IterAdapter(Filter(iter, pred))
-  def zip(other_iter) = IterAdapter(Zip(iter, other_iter.iter()))
+class Adapter(iter)
+  def enumerate() = Adapter(Enumerate(iter))
+  def take(n) = Adapter(Take(iter, n))
+  def drop(n) = Adapter(Drop(iter, n))
+  def map(func) = Adapter(Map(iter, func))
+  def filter(pred) = Adapter(Filter(iter, pred))
+  def zip(other_iter) = Adapter(Zip(iter, other_iter.iter()))
   def each(func)
     for item in self
       func(item)
@@ -124,7 +124,7 @@ class Range(
   def self::upto(finish) = self(0, finish)
   def self::from(start) = self(start, nil)
 
-  def iter() = IterAdapter(RangeIter(self))
+  def iter() = Adapter(RangeIter(self))
 
   def to_s() = start.to_s() + ".." + (finish or "")
 end
@@ -136,7 +136,7 @@ class Array
     array
   end
 
-  def iter() = IterAdapter(ArrayIter(self))
+  def iter() = Adapter(ArrayIter(self))
 end
 
 
@@ -162,4 +162,9 @@ end
 
 class Method
   def to_s() = __receiver__.__name__ + "::" + __name__
+end
+
+class Dictionary
+  def keys() = self.entries().iter().map(fn t -> t[0] end).to_a()
+  def values() = self.entries().iter().map(fn t -> t[1] end).to_a()
 end

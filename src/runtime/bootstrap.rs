@@ -89,7 +89,6 @@ define_builtins!(Builtins {
     Array,
     Tuple,
     Dictionary,
-    DictionaryIter,
     IO,
     Main,
     bool_true,
@@ -120,7 +119,10 @@ impl Runtime {
     }
 
     fn bootstrap_classes_and_objects(&mut self) {
-        self.stack.push(StackFrame::default());
+        self.stack.push(StackFrame {
+            _context: "global",
+            ..StackFrame::default()
+        });
         self.builtins.Class = Object::new_dummy();
         let Class = self.builtins.Class.clone();
         Class.borrow_mut().class = Some(Class.clone());
@@ -164,7 +166,6 @@ impl Runtime {
 
         // create Dictionary
         self.builtins.Dictionary = self.create_simple_class(builtin::class::Dictionary);
-        self.builtins.DictionaryIter = self.create_simple_class(builtin::class::DictionaryIter);
 
         // create booleans
         self.builtins.Bool = self.create_simple_class(builtin::class::Bool);
@@ -509,12 +510,13 @@ impl Runtime {
                 fn entries() {
                     let this_ref = this.borrow();
                     let hash_map = this_ref.dictionary().unwrap();
-                    let keys: Vec<_> = hash_map.keys().map(|key| runtime.create_string(key)).collect();
-                    let entries = keys
-                        .into_iter()
-                        .zip(hash_map.values().cloned())
-                        .map(|(k, v)| runtime.create_tuple(vec![k, v]))
-                        .collect();
+                    let entries = hash_map
+                        .iter()
+                        .map(|(key, value)| {
+                            let key = runtime.create_string(key.clone());
+                            runtime.create_tuple(vec![key, value.clone()])
+                        })
+                        .collect::<Vec<_>>();
                     runtime.create_array(entries)
                 }
 
@@ -541,6 +543,25 @@ impl Runtime {
             }
 
             impl self.builtins.Tuple => {
+                fn __index__(index) {
+                    if index.borrow().__class__() != runtime.builtins.Number {
+                        return Err(TypeMismatch {
+                            class: index.borrow().__class__().borrow().__name__().unwrap(),
+                            expected: "Number".to_string(),
+                        });
+                    };
+                    let index: f64 = index.borrow().number().unwrap();
+                    let index = index as usize;
+                    let this_ref = this.borrow();
+                    let array = this_ref.array().unwrap();
+                    if index >= array.len() {
+                        return Err(Index {
+                            error: "tuple index out of bounds"
+                        });
+                    }
+                    array[index].clone()
+                }
+
                 fn to_s() {
                     let this_ref = this.borrow();
                     let items = this_ref.array().unwrap();

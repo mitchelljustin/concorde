@@ -1,5 +1,3 @@
-r = Range(1, 10)
-ok, item = r.iter().next()
-if ok
-  IO::println(item)
-end
+IO::println([a: 1, b: 2].keys())
+IO::println([a: 1, b: 2].values())
+IO::println([a: 1, b: 2].entries())
