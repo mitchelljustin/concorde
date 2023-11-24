@@ -6,10 +6,10 @@ use crate::runtime::object::{
     MethodBody, MethodReceiver, MethodRef, ObjectRef, Param, DEFAULT_NAME,
 };
 use crate::runtime::Error::{
-    ArityMismatch, AssignmentRhsMustBeArrayOrTuple, BadIterator, BadPath,
-    IllegalAssignmentOperator, IllegalAssignmentTarget, IndexOutOfBounds, InvalidMember,
-    NoSuchMethod, NoSuchProperty, NoSuchVariable, NotCallable, ObjectNotCallable,
-    ReturnFromInitializer, ReturnFromMethod, TypeMismatch, UndefinedProperty,
+    ArityMismatch, AssignmentRhsMustBeTuple, BadIterator, BadPath, IllegalAssignmentOperator,
+    IllegalAssignmentTarget, IndexOutOfBounds, InvalidMember, NoSuchMethod, NoSuchProperty,
+    NoSuchVariable, NotCallable, ObjectNotCallable, ReturnFromInitializer, ReturnFromMethod,
+    TypeMismatch, UndefinedProperty,
 };
 use crate::runtime::{Error, Runtime};
 use crate::runtime::{Result, StackFrame};
@@ -240,11 +240,9 @@ impl Runtime {
                 let value = value?;
                 if binding.v.variables.len() > 1 {
                     let value_ref = value.borrow();
-                    if ![&self.builtins.Array, &self.builtins.Tuple]
-                        .contains(&&value_ref.__class__())
-                    {
-                        return Err(AssignmentRhsMustBeArrayOrTuple {
-                            node: assignment.meta.clone(),
+                    if value_ref.__class__() != self.builtins.Tuple {
+                        return Err(AssignmentRhsMustBeTuple {
+                            node: assignment.meta,
                         });
                     }
                     let values = value_ref.array().unwrap();

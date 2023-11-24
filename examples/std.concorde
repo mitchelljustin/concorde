@@ -144,6 +144,7 @@ class ArrayIter(
   array,
   index = 0,
 )
+  def iter() = self
   def next()
     if self.index >= self.array.len() then return None
     item = self.array[self.index]
@@ -164,7 +165,12 @@ class Method
   def to_s() = __receiver__.__name__ + "::" + __name__
 end
 
+class Tuple
+  def self::first(tuple) = tuple[0]
+  def self::second(tuple) = tuple[1]
+end
+
 class Dictionary
-  def keys() = self.entries().iter().map(fn t -> t[0] end).to_a()
-  def values() = self.entries().iter().map(fn t -> t[1] end).to_a()
+  def keys() = self.entries().iter().map(Tuple::first).to_a()
+  def values() = self.entries().iter().map(Tuple::second).to_a()
 end

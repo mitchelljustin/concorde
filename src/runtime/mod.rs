@@ -56,8 +56,8 @@ pub enum Error {
     IllegalAssignmentTarget { node: NodeMeta },
     #[error("illegal assignment operator: {node}")]
     IllegalAssignmentOperator { node: NodeMeta },
-    #[error("assignment rhs must be array or tuple: {node}")]
-    AssignmentRhsMustBeArrayOrTuple { node: NodeMeta },
+    #[error("assignment rhs must be tuple: {node}")]
+    AssignmentRhsMustBeTuple { node: NodeMeta },
     #[error("index error: {error}")]
     Index { error: &'static str },
     #[error("illegal constructor call: {class}")]

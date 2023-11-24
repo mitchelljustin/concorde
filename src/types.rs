@@ -2,7 +2,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io;
 
 use pest::iterators::Pair;
-use pest::RuleType;
 
 use crate::parse::Rule;
 use crate::{parse, runtime};

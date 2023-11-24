@@ -91,6 +91,7 @@ define_builtins!(Builtins {
     Dictionary,
     IO,
     Main,
+    Core,
     bool_true,
     bool_false,
     nil,
@@ -193,6 +194,9 @@ impl Runtime {
         root_frame.open_classes.push(self.builtins.Main.clone());
 
         self.builtins.IO = self.create_simple_class(builtin::class::IO);
+
+        self.builtins.Core = self.create_simple_class(builtin::class::Core);
+        self.stack[0].open_classes.push(self.builtins.Core.clone());
     }
 
     fn bootstrap_stdlib(&mut self) {
@@ -573,6 +577,12 @@ impl Runtime {
                         inner.push(',');
                     }
                     runtime.create_string(format!("({inner})"))
+                }
+            }
+
+            impl self.builtins.Core => {
+                fn clone(obj) {
+                    Object::clone(&obj)
                 }
             }
         );

@@ -53,34 +53,37 @@ pub fn parse_file(path: impl AsRef<std::path::Path>) -> Result<Node<Program>, To
     parse_source(&source)
 }
 
-pub fn pretty_print_pair(mut pair: Pair<Rule>, indent_level: usize) {
-    let source = pair.as_str();
-    let first_rule = pair.as_rule();
-    let indent = "| ".repeat(indent_level);
-    let mut rules = vec![first_rule];
-    let mut inner: Vec<Pair<Rule>>;
-    loop {
-        inner = pair.clone().into_inner().collect();
-        if inner.len() != 1 {
-            break;
+pub fn pretty_print_pair<R: RuleType>(pair: Pair<R>) {
+    fn pp<R: RuleType>(mut pair: Pair<R>, indent_level: usize) {
+        let source = pair.as_str();
+        let first_rule = pair.as_rule();
+        let indent = ". ".repeat(indent_level);
+        let mut rules = vec![first_rule];
+        let mut inner: Vec<Pair<R>>;
+        loop {
+            inner = pair.into_inner().collect();
+            let [single_inner_pair] = &inner[..] else {
+                break;
+            };
+            if single_inner_pair.as_str() != source {
+                break;
+            }
+            rules.push(single_inner_pair.as_rule());
+            pair = single_inner_pair.clone();
         }
-        let sub_pair = &inner[0];
-        if sub_pair.as_str() != source {
-            break;
+        let rule_prefix = match &rules[..] {
+            [] => unreachable!(),
+            [rule] => format!("{rule:?}"),
+            [first_rule, second_rule] => format!("{first_rule:?} > {second_rule:?}"),
+            [first_rule, .., last_rule] => format!("{first_rule:?} > .. > {last_rule:?}"),
+        };
+        let source_no_newlines = source.replace('\n', "\\n");
+        println!("{indent}{rule_prefix} '{source_no_newlines}'");
+        for sub_pair in inner {
+            pp(sub_pair, indent_level + 1);
         }
-        rules.push(sub_pair.as_rule());
-        pair = sub_pair.clone();
     }
-    let rule_prefix = rules
-        .into_iter()
-        .map(|rule| format!("{rule:?}"))
-        .collect::<Vec<_>>()
-        .join(" > ");
-    let source_no_newlines = source.replace('\n', " \\n ");
-    println!("{indent}{rule_prefix} '{source_no_newlines}'");
-    for sub_pair in inner {
-        pretty_print_pair(sub_pair, indent_level + 1);
-    }
+    pp(pair, 0);
 }
 
 pub fn parse_source(source: &str) -> Result<Node<Program>, TopError> {
@@ -88,7 +91,7 @@ pub fn parse_source(source: &str) -> Result<Node<Program>, TopError> {
         .map_err(|err| Error::Pest(Box::new(err)))?
         .next()
         .unwrap();
-    pretty_print_pair(pair.clone(), 0);
+    // pretty_print_pair(pair.clone());
     let body = parse_block(pair.clone().into_inner().next().unwrap())?;
     Ok(Program { body }.into_node(&pair))
 }
@@ -334,13 +337,13 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Node<Expression>> {
             parse_expression(pair.into_inner().next().unwrap())
         }
         Rule::binding => {
-            let mut pairs = pair.clone().into_inner().collect::<Vec<_>>();
+            let pairs = pair.clone().into_inner().collect::<Vec<_>>();
             if pairs.len() > 1 {
                 return Err(IllegalBinding {
                     node: (&pair).into(),
                 });
             }
-            let var_pair = pairs.pop().unwrap().clone();
+            let var_pair = pairs[0].clone();
             Ok(Expression::Variable(parse_variable(var_pair)?).into_node(&pair))
         }
         Rule::logical_or
@@ -531,7 +534,7 @@ fn parse_lvalue(pair: Pair<Rule>) -> Result<Node<LValue>> {
                     };
                     Ok(var)
                 })
-                .collect::<Result<Vec<_>>>()?;
+                .try_collect()?;
 
             Ok(LValue::Binding(Binding { variables }.into_node(&pair)).into_node(&pair))
         }

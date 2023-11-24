@@ -73,6 +73,40 @@ impl PartialEq for Object {
 pub const DEFAULT_NAME: &str = "(anonymous)";
 
 impl Object {
+    pub fn clone(object_ref: &ObjectRef) -> ObjectRef {
+        let object = object_ref.borrow();
+        let properties = object
+            .properties
+            .iter()
+            .filter_map(|(name, property)| {
+                // gotta be careful about avoiding cyclic infinite clones here
+                if name.starts_with("__") {
+                    return None;
+                }
+                if Rc::ptr_eq(property, object_ref) {
+                    return None;
+                };
+                // TODO: more advanced cycle detection
+                Some((name.clone(), Object::clone(property)))
+            })
+            .collect();
+        Rc::new_cyclic(|weak_self| {
+            RefCell::new(Self {
+                // fine to clone by-ref here
+                class: object.class.clone(),
+                superclass: object.superclass.clone(),
+                // new self-ref
+                weak_self: weak_self.clone(),
+                // gotta be careful about this one
+                properties,
+                // fine to clone by-ref as well. methods are immutable
+                methods: object.methods.clone(),
+                // easy primitive clone
+                primitive: object.primitive.clone(),
+            })
+        })
+    }
+
     pub fn new_dummy() -> ObjectRef {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {

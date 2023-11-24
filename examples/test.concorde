@@ -1,3 +1,4 @@
-IO::println([a: 1, b: 2].keys())
-IO::println([a: 1, b: 2].values())
-IO::println([a: 1, b: 2].entries())
+a = 2
+b = a
+b += 3
+IO::println(a, b)
