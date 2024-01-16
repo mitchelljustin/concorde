@@ -22,7 +22,7 @@ mod types;
 fn run() -> Result<(), TopError> {
     let [_executable, filename] = args().next_chunk().unwrap_or_default();
     let mut runtime = Runtime::new();
-    runtime.exec_file("./examples/std.concorde").unwrap();
+    runtime.exec_file("./examples/std.concorde")?;
     runtime.exec_file(filename)?;
     Ok(())
 }

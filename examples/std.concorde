@@ -1,3 +1,14 @@
+class Swag
+  def __call__()
+    IO::println("SWAG")
+  end
+
+  def yolo() = nil
+end
+
+swag = Swag()
+swag()
+
 def Some(x) = (true, x)
 None = (false, nil)
 

@@ -640,7 +640,7 @@ impl Runtime {
                 builtin::op::__call__.into(),
                 vec![Param::Vararg("args".into())],
                 MethodBody::System(|runtime, this, _method_name, args| {
-                    runtime.call_closure(this, args)
+                    runtime.call_callable(this, args)
                 }),
             )
             .unwrap();

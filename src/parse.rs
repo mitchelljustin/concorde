@@ -105,7 +105,7 @@ fn parse_list<T: NodeVariant>(
     pair: Pair<Rule>,
     parse_one: fn(Pair<Rule>) -> Result<Node<T>>,
 ) -> Result<Vec<Node<T>>> {
-    pair.into_inner().map(parse_one).collect()
+    pair.into_inner().map(parse_one).try_collect()
 }
 
 fn parse_statement(pair: Pair<Rule>) -> Result<Node<Statement>> {
@@ -226,7 +226,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Node<Statement>> {
                 .clone()
                 .into_inner()
                 .next()
-                .map(|pair| parse_expression(pair))
+                .map(parse_expression)
                 .transpose()?;
             Ok(Statement::Return(Return { retval }.into_node(&pair)).into_node(&pair))
         }
@@ -377,10 +377,10 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Node<Expression>> {
         }
         Rule::path => {
             let mut components = parse_list(pair.clone(), parse_variable)?;
-            if components.len() == 1 {
-                Ok(Expression::Variable(components.pop().unwrap()).into_node(&pair))
-            } else {
+            if components.len() > 1 {
                 Ok(Expression::Path(Path { components }.into_node(&pair)).into_node(&pair))
+            } else {
+                Ok(Expression::Variable(components.pop().unwrap()).into_node(&pair))
             }
         }
         Rule::if_else => {
@@ -411,11 +411,12 @@ fn parse_call(pair: &Pair<Rule>) -> Result<Node<Expression>> {
     let mut inner = pair.clone().into_inner();
     let mut expr = parse_expression(inner.next().unwrap())?;
     for arg_list in inner {
-        let arguments = if let Some(expr_list) = arg_list.into_inner().next() {
-            parse_list(expr_list, parse_expression)?
-        } else {
-            Vec::new()
-        };
+        let arguments = arg_list
+            .into_inner()
+            .next()
+            .map(|expr_list| parse_list(expr_list.clone(), parse_expression))
+            .transpose()?
+            .unwrap_or_default();
         expr = Expression::Call(
             Call {
                 target: Box::new(expr),

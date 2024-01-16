@@ -58,6 +58,7 @@ pub struct Method {
 pub struct Object {
     pub(super) class: Option<ObjectRef>,
     pub(super) superclass: Option<ObjectRef>,
+    pub(super) _name: String,
     weak_self: WeakObjectRef,
     properties: HashMap<String, ObjectRef>,
     methods: HashMap<String, MethodRef>,
@@ -92,6 +93,7 @@ impl Object {
             .collect();
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
+                _name: object._name.clone(),
                 // fine to clone by-ref here
                 class: object.class.clone(),
                 superclass: object.superclass.clone(),
@@ -110,6 +112,7 @@ impl Object {
     pub fn new_dummy() -> ObjectRef {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
+                _name: Default::default(),
                 class: None,
                 superclass: None,
                 primitive: None,
@@ -123,6 +126,7 @@ impl Object {
     pub fn new_of_class(class: ObjectRef) -> ObjectRef {
         Rc::new_cyclic(|weak_self| {
             RefCell::new(Self {
+                _name: Default::default(),
                 class: Some(class),
                 superclass: None,
                 primitive: None,
@@ -224,7 +228,11 @@ impl Object {
     }
 
     pub fn set_property(&mut self, name: impl Into<String>, value: ObjectRef) {
-        self.properties.insert(name.into(), value);
+        let name = name.into();
+        if name == builtin::property::__name__ {
+            self._name = value.borrow().string().cloned().unwrap_or_default();
+        }
+        self.properties.insert(name, value);
     }
 
     pub fn get_property(&self, name: &str) -> Option<ObjectRef> {
@@ -289,8 +297,8 @@ impl Debug for Object {
                 &self
                     .class
                     .as_ref()
-                    .map(|class| class.borrow().__name__().unwrap())
-                    .unwrap_or("N/A".to_string()),
+                    .and_then(|class| class.borrow().__name__())
+                    .unwrap_or("".to_string()),
             )
             .field("methods", &self.methods)
             .field("properties", &self.properties.keys().collect::<Vec<_>>())

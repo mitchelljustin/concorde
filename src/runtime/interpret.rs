@@ -534,16 +534,19 @@ impl Runtime {
         }
     }
 
-    pub(crate) fn call_closure(
+    pub(crate) fn call_callable(
         &mut self,
-        closure: ObjectRef,
+        callable: ObjectRef,
         arguments: Vec<ObjectRef>,
     ) -> Result<ObjectRef> {
-        let method = closure
-            .borrow()
-            .resolve_own_method(builtin::op::__call__)
-            .expect("closure object has no __call__ method");
-        self.call_method(closure, method, arguments)
+        let method;
+        {
+            let callable_ref = callable.borrow();
+            method = callable_ref
+                .resolve_own_method(builtin::op::__call__)
+                .ok_or(ObjectNotCallable { node: None.into() })?;
+        }
+        self.call_method(callable, method, arguments)
     }
 
     fn eval_call_expr(&mut self, call: Node<Call>) -> Result<ObjectRef> {
@@ -554,6 +557,7 @@ impl Runtime {
             Expression::Variable(var) => {
                 let method_name = &var.v.ident.v.name;
                 if let Some(variable) = self.resolve_variable(method_name) {
+                    println!(">> {method_name} {:?}", variable.borrow());
                     if self.is_class(&variable) {
                         receiver = self.create_object(variable.clone());
                         method = variable.borrow().get_init_method();
@@ -630,12 +634,13 @@ impl Runtime {
     }
 
     fn resolve_callable_method(object: &ObjectRef, meta: NodeMeta) -> Result<MethodRef, Error> {
-        object
-            .borrow()
-            .__class__()
-            .borrow()
+        let object_ref = object.borrow();
+        let class = object_ref.__class__();
+        let class_ref = class.borrow();
+        println!(">>> {:?} {:?}", object_ref, class_ref);
+        class_ref
             .resolve_own_method(builtin::op::__call__)
-            .ok_or(ObjectNotCallable { node: meta })
+            .ok_or(ObjectNotCallable { node: meta.into() })
     }
 
     fn resolve_class_from_path(&mut self, path: Node<Path>) -> Result<ObjectRef> {

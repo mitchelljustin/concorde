@@ -34,7 +34,7 @@ pub enum Error {
     #[error("no such method '{search}': {node}")]
     NoSuchMethod { node: MaybeNodeMeta, search: String },
     #[error("object not callable (has no __call__ method): {node}")]
-    ObjectNotCallable { node: NodeMeta },
+    ObjectNotCallable { node: MaybeNodeMeta },
     #[error("arity mismatch for '{class_name}::{method_name}()': expected {expected} args, got {actual}")]
     ArityMismatch {
         class_name: String,
